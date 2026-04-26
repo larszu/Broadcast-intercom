@@ -1,0 +1,1459 @@
+import cors from "cors";
+import AdmZip from "adm-zip";
+import express from "express";
+import { createServer } from "node:http";
+import { randomUUID } from "node:crypto";
+import { createRequire } from "node:module";
+import { existsSync, readdirSync } from "node:fs";
+import { promises as fs } from "node:fs";
+import { networkInterfaces } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { WebSocketServer } from "ws";
+import type {
+	AudioSettings,
+	BeltpackDevice,
+	ClientMessage,
+	ConfigRef,
+	CoreState,
+	DectAntenna,
+	EventItem,
+	IntercomUser,
+	MatrixRoute,
+	PluginBridgeConfig,
+	ServerMessage,
+	TransportType,
+	UserRole,
+} from "@broadcast/shared";
+
+const PORT = Number(process.env.PORT || 4000);
+const MOCK_MODE = process.env.MOCK_DEVICES === "1";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const CONFIG_DIR = path.resolve(__dirname, "../../../data/configs");
+const MODEL_DIR = path.resolve(__dirname, "../../../data/models");
+const DEFAULT_MODEL_URL = process.env.VOSK_MODEL_URL || "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip";
+const require = createRequire(import.meta.url);
+
+const defaultChannels = {
+	ch1: { id: "ch1", name: "DIR", color: "#c1121f" },
+	ch2: { id: "ch2", name: "CAM", color: "#0077b6" },
+	ch3: { id: "ch3", name: "AUDIO", color: "#2a9d8f" },
+	ch4: { id: "ch4", name: "STAGE", color: "#f4a261" },
+};
+
+function sanitizeConfigName(input: string): string {
+	const cleaned = input.trim().toLowerCase().replace(/[^a-z0-9-_ ]/g, "").replace(/\s+/g, "-");
+	return cleaned || "default";
+}
+
+function now(): number {
+	return Date.now();
+}
+
+function defaultAudioSettings(transport: TransportType): AudioSettings {
+	return {
+		inputGainDb: 0,
+		outputGainDb: transport === "ethernet" ? 2 : 0,
+		sidetonePercent: 20,
+		noiseGateDb: -45,
+		limiterEnabled: true,
+	};
+}
+
+function defaultPluginBridge(): PluginBridgeConfig {
+	return {
+		enabled: false,
+		protocol: "ws",
+		host: "ws://127.0.0.1:39000",
+		pluginPaths: [],
+		preset: "",
+		bypass: true,
+	};
+}
+
+function defaultUserPermissions(role: UserRole, channels: string[]) {
+	const limitedTalk = channels.slice(0, 2);
+	const limitedListen = channels.slice(0, 3);
+
+	if (role === "admin") {
+		return {
+			talkChannelIds: channels,
+			listenChannelIds: channels,
+			transcriptionChannelIds: channels,
+			canAllCall: true,
+			canManageDevices: true,
+		};
+	}
+
+	if (role === "director") {
+		return {
+			talkChannelIds: channels,
+			listenChannelIds: channels,
+			transcriptionChannelIds: channels,
+			canAllCall: true,
+			canManageDevices: false,
+		};
+	}
+
+	if (role === "operator") {
+		return {
+			talkChannelIds: limitedTalk,
+			listenChannelIds: limitedListen,
+			transcriptionChannelIds: limitedListen,
+			canAllCall: false,
+			canManageDevices: false,
+		};
+	}
+
+	return {
+		talkChannelIds: limitedTalk,
+		listenChannelIds: limitedListen,
+		transcriptionChannelIds: [],
+		canAllCall: false,
+		canManageDevices: false,
+	};
+}
+
+function createDefaultUsers(channels: string[]): Record<string, IntercomUser> {
+	const ts = now();
+	return {
+		"user-admin": {
+			id: "user-admin",
+			name: "Intercom Admin",
+			role: "admin",
+			color: "#0a9396",
+			permissions: defaultUserPermissions("admin", channels),
+			assignedDeviceIds: [],
+			createdAt: ts,
+			updatedAt: ts,
+		},
+	};
+}
+
+function createInitialState(configName: string): CoreState {
+	const channelIds = Object.values(defaultChannels).map((ch) => ch.id);
+	return {
+		activeConfig: { name: configName, updatedAt: now() },
+		users: createDefaultUsers(channelIds),
+		devices: {},
+		antennas: {},
+		channels: { ...defaultChannels },
+		matrixRoutes: [],
+		pluginBridge: defaultPluginBridge(),
+		events: [],
+	};
+}
+
+interface VoskRuntime {
+	vosk: any | null;
+	model: any | null;
+	recognizers: Map<string, any>;
+	disabledReason: string;
+	modelPath: string;
+}
+
+const voskRuntime: VoskRuntime = {
+	vosk: null,
+	model: null,
+	recognizers: new Map(),
+	disabledReason: "",
+	modelPath: process.env.VOSK_MODEL_PATH || path.resolve(MODEL_DIR, "vosk-model-small-en-us-0.15"),
+};
+
+function freeVoskRuntime(): void {
+	voskRuntime.recognizers.forEach((recognizer) => {
+		if (recognizer && typeof recognizer.free === "function") {
+			recognizer.free();
+		}
+	});
+	voskRuntime.recognizers.clear();
+
+	if (voskRuntime.model && typeof voskRuntime.model.free === "function") {
+		voskRuntime.model.free();
+	}
+
+	voskRuntime.model = null;
+	voskRuntime.vosk = null;
+	voskRuntime.disabledReason = "";
+}
+
+async function findModelDirectory(rootDir: string): Promise<string | null> {
+	if (!existsSync(rootDir)) {
+		return null;
+	}
+
+	const entries = await fs.readdir(rootDir, { withFileTypes: true });
+	const nested = entries
+		.filter((entry) => entry.isDirectory())
+		.map((entry) => path.join(rootDir, entry.name));
+
+	for (const candidate of nested) {
+		if (candidate.toLowerCase().includes("vosk-model")) {
+			return candidate;
+		}
+	}
+
+	return null;
+}
+
+async function installVoskModel(url = DEFAULT_MODEL_URL, force = false): Promise<{ modelPath: string; downloaded: boolean }> {
+	await fs.mkdir(MODEL_DIR, { recursive: true });
+
+	if (!force && existsSync(voskRuntime.modelPath)) {
+		return { modelPath: voskRuntime.modelPath, downloaded: false };
+	}
+
+	const tmpZip = path.join(MODEL_DIR, "vosk-model.zip");
+	const response = await fetch(url);
+	if (!response.ok) {
+		throw new Error(`Download failed (${response.status})`);
+	}
+
+	const buffer = Buffer.from(await response.arrayBuffer());
+	await fs.writeFile(tmpZip, buffer);
+
+	const zip = new AdmZip(tmpZip);
+	zip.extractAllTo(MODEL_DIR, true);
+	await fs.unlink(tmpZip);
+
+	const modelDir = await findModelDirectory(MODEL_DIR);
+	if (!modelDir) {
+		throw new Error("No extracted Vosk model directory found");
+	}
+
+	voskRuntime.modelPath = modelDir;
+	freeVoskRuntime();
+	return { modelPath: modelDir, downloaded: true };
+}
+
+function recognizerKey(deviceId: string, channelId: string): string {
+	return `${deviceId}::${channelId}`;
+}
+
+function parseVoskText(result: unknown): string {
+	if (!result) {
+		return "";
+	}
+
+	if (typeof result === "string") {
+		try {
+			const parsed = JSON.parse(result) as { text?: string; partial?: string };
+			return (parsed.text || parsed.partial || "").trim();
+		} catch {
+			return "";
+		}
+	}
+
+	if (typeof result === "object") {
+		const parsed = result as { text?: string; partial?: string };
+		return (parsed.text || parsed.partial || "").trim();
+	}
+
+	return "";
+}
+
+function describeError(error: unknown): string {
+	if (error instanceof Error) {
+		return error.message;
+	}
+
+	if (typeof error === "string") {
+		return error;
+	}
+
+	return "Unknown error";
+}
+
+function getLanHosts(): string[] {
+	const nets = networkInterfaces();
+	const hosts = new Set<string>();
+
+	for (const entries of Object.values(nets)) {
+		for (const entry of entries || []) {
+			if (!entry || entry.family !== "IPv4" || entry.internal) {
+				continue;
+			}
+			hosts.add(entry.address);
+		}
+	}
+
+	return Array.from(hosts);
+}
+
+function loadVoskIfAvailable(): boolean {
+	if (voskRuntime.model || voskRuntime.disabledReason) {
+		return Boolean(voskRuntime.model);
+	}
+
+	if (!existsSync(voskRuntime.modelPath)) {
+		voskRuntime.disabledReason = `Vosk model not found: ${voskRuntime.modelPath}`;
+		return false;
+	}
+
+	try {
+		const vosk = require("vosk");
+		if (typeof vosk.setLogLevel === "function") {
+			vosk.setLogLevel(-1);
+		}
+		voskRuntime.vosk = vosk;
+		voskRuntime.model = new vosk.Model(voskRuntime.modelPath);
+		return true;
+	} catch (error) {
+		voskRuntime.disabledReason = `Vosk module not available: ${describeError(error)}`;
+		return false;
+	}
+}
+
+function dropRecognizer(deviceId: string, channelId: string): void {
+	const key = recognizerKey(deviceId, channelId);
+	const recognizer = voskRuntime.recognizers.get(key);
+	if (recognizer && typeof recognizer.free === "function") {
+		recognizer.free();
+	}
+	voskRuntime.recognizers.delete(key);
+}
+
+function ensureRecognizer(deviceId: string, channelId: string, sampleRate: number): any | null {
+	if (!loadVoskIfAvailable() || !voskRuntime.vosk || !voskRuntime.model) {
+		return null;
+	}
+
+	const key = recognizerKey(deviceId, channelId);
+	const existing = voskRuntime.recognizers.get(key);
+	if (existing) {
+		return existing;
+	}
+
+	let recognizer: any;
+	try {
+		recognizer = new voskRuntime.vosk.Recognizer({ model: voskRuntime.model, sampleRate });
+	} catch {
+		recognizer = new voskRuntime.vosk.Recognizer(voskRuntime.model, sampleRate);
+	}
+
+	voskRuntime.recognizers.set(key, recognizer);
+	return recognizer;
+}
+
+function hydrateState(raw: Partial<CoreState>, configName: string, updatedAt?: number): CoreState {
+	const hydratedChannels = Object.keys(raw.channels || {}).length > 0 ? (raw.channels as CoreState["channels"]) : { ...defaultChannels };
+	const channelIds = Object.keys(hydratedChannels);
+	const hydrated: CoreState = {
+		activeConfig: {
+			name: configName,
+			updatedAt: updatedAt || raw.activeConfig?.updatedAt || now(),
+		},
+		users: raw.users || createDefaultUsers(channelIds),
+		devices: raw.devices || {},
+		antennas: raw.antennas || {},
+		channels: hydratedChannels,
+		matrixRoutes: raw.matrixRoutes || [],
+		pluginBridge: { ...defaultPluginBridge(), ...(raw.pluginBridge || {}) },
+		events: raw.events || [],
+	};
+
+	Object.values(hydrated.devices).forEach((device) => {
+		device.audio = device.audio || defaultAudioSettings(device.transport);
+		device.listenChannelIds = device.listenChannelIds || ["ch1"];
+		device.channelIds = device.channelIds || ["ch1"];
+		device.transcriptionChannelIds = device.transcriptionChannelIds || [];
+	});
+
+	Object.values(hydrated.users).forEach((user) => {
+		user.permissions = user.permissions || defaultUserPermissions(user.role, channelIds);
+		user.assignedDeviceIds = user.assignedDeviceIds || [];
+	});
+
+	return hydrated;
+}
+
+function configFilePath(configName: string): string {
+	return path.join(CONFIG_DIR, `${sanitizeConfigName(configName)}.json`);
+}
+
+async function ensureConfigDir(): Promise<void> {
+	await fs.mkdir(CONFIG_DIR, { recursive: true });
+}
+
+async function listConfigs(): Promise<ConfigRef[]> {
+	await ensureConfigDir();
+	const files = await fs.readdir(CONFIG_DIR);
+	const refs: ConfigRef[] = [];
+
+	for (const file of files.filter((item) => item.endsWith(".json"))) {
+		const stat = await fs.stat(path.join(CONFIG_DIR, file));
+		refs.push({
+			name: file.replace(/\.json$/, ""),
+			updatedAt: stat.mtimeMs,
+		});
+	}
+
+	return refs.sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+let state: CoreState = createInitialState("default");
+
+async function saveConfig(configName?: string): Promise<void> {
+	const target = sanitizeConfigName(configName || state.activeConfig.name);
+	state.activeConfig = { name: target, updatedAt: now() };
+	await ensureConfigDir();
+	await fs.writeFile(configFilePath(target), JSON.stringify(state, null, 2), "utf-8");
+}
+
+async function loadConfig(configName: string): Promise<CoreState> {
+	const target = sanitizeConfigName(configName);
+	const raw = await fs.readFile(configFilePath(target), "utf-8");
+	const parsed = JSON.parse(raw) as Partial<CoreState>;
+	const stat = await fs.stat(configFilePath(target));
+	return hydrateState(parsed, target, stat.mtimeMs);
+}
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const server = createServer(app);
+const wss = new WebSocketServer({ server, path: "/ws" });
+
+// Map ws connection → registered device ID (updated on register_device)
+const wsDeviceMap = new Map<import("ws").WebSocket, string>();
+
+function pushEvent(type: EventItem["type"], message: string): EventItem {
+	const event: EventItem = {
+		id: randomUUID(),
+		ts: now(),
+		type,
+		message,
+	};
+	state.events.unshift(event);
+	state.events = state.events.slice(0, 300);
+	return event;
+}
+
+function emit(message: ServerMessage): void {
+	const payload = JSON.stringify(message);
+	wss.clients.forEach((client) => {
+		if (client.readyState === 1) {
+			client.send(payload);
+		}
+	});
+}
+
+function emitState(): void {
+	emit({ type: "state", payload: state });
+}
+
+function emitEvent(type: EventItem["type"], message: string): void {
+	const event = pushEvent(type, message);
+	emit({ type: "event", payload: event });
+	emitState();
+}
+
+function ensureDevice(deviceId: string): BeltpackDevice | undefined {
+	return state.devices[deviceId];
+}
+
+function ensureUser(userId?: string): IntercomUser | undefined {
+	if (!userId) {
+		return undefined;
+	}
+	return state.users[userId];
+}
+
+function uniqueKnownChannels(channelIds: string[]): string[] {
+	const known = new Set(Object.keys(state.channels));
+	const dedup = new Set<string>();
+	channelIds.forEach((channelId) => {
+		if (known.has(channelId)) {
+			dedup.add(channelId);
+		}
+	});
+	return Array.from(dedup);
+}
+
+function filterByPermissions(requested: string[], allowed: string[]): string[] {
+	if (allowed.length === 0) {
+		return [];
+	}
+	const allowedSet = new Set(allowed);
+	return requested.filter((channelId) => allowedSet.has(channelId));
+}
+
+function assignDeviceToUser(deviceId: string, userId?: string): void {
+	Object.values(state.users).forEach((user) => {
+		user.assignedDeviceIds = user.assignedDeviceIds.filter((id) => id !== deviceId);
+	});
+
+	if (!userId || !state.users[userId]) {
+		return;
+	}
+
+	const user = state.users[userId];
+	if (!user.assignedDeviceIds.includes(deviceId)) {
+		user.assignedDeviceIds.push(deviceId);
+	}
+	user.updatedAt = now();
+}
+
+function applyUserPermissions(device: BeltpackDevice): void {
+	const user = ensureUser(device.userId);
+	if (!user) {
+		device.channelIds = uniqueKnownChannels(device.channelIds.length ? device.channelIds : ["ch1"]);
+		device.listenChannelIds = uniqueKnownChannels(device.listenChannelIds.length ? device.listenChannelIds : device.channelIds.slice(0, 2));
+		device.transcriptionChannelIds = uniqueKnownChannels(device.transcriptionChannelIds || []);
+		if (device.talkChannelId && !device.channelIds.includes(device.talkChannelId)) {
+			device.talkChannelId = undefined;
+		}
+		return;
+	}
+
+	device.channelIds = filterByPermissions(uniqueKnownChannels(device.channelIds), user.permissions.talkChannelIds);
+	if (device.channelIds.length === 0) {
+		device.channelIds = user.permissions.talkChannelIds.slice(0, 1);
+	}
+
+	device.listenChannelIds = filterByPermissions(uniqueKnownChannels(device.listenChannelIds), user.permissions.listenChannelIds);
+	if (device.listenChannelIds.length === 0) {
+		device.listenChannelIds = user.permissions.listenChannelIds.slice(0, 1);
+	}
+
+	device.transcriptionChannelIds = filterByPermissions(
+		uniqueKnownChannels(device.transcriptionChannelIds || []),
+		user.permissions.transcriptionChannelIds
+	);
+
+	if (device.talkChannelId && !user.permissions.talkChannelIds.includes(device.talkChannelId)) {
+		device.talkChannelId = undefined;
+	}
+}
+
+function ensureAntenna(antennaId: string): DectAntenna | undefined {
+	return state.antennas[antennaId];
+}
+
+function matrixAllows(fromDeviceId: string, toDeviceId: string, channelId: string): boolean {
+	const route = state.matrixRoutes.find(
+		(item) => item.fromDeviceId === fromDeviceId && item.toDeviceId === toDeviceId && item.channelId === channelId
+	);
+	return route ? route.enabled : true;
+}
+
+function routeTalkEvent(deviceId: string, channelId?: string): void {
+	const source = ensureDevice(deviceId);
+	if (!source) {
+		return;
+	}
+
+	if (!channelId) {
+		emitEvent("talk", `${source.label} TALK OFF`);
+		return;
+	}
+
+	const isAllCall = channelId === "all";
+	const listeners = Object.values(state.devices)
+		.filter(
+			(device) =>
+				device.id !== deviceId &&
+				(isAllCall || (device.listenChannelIds.includes(channelId) && matrixAllows(deviceId, device.id, channelId)))
+		)
+		.map((device) => device.label)
+		.join(", ");
+
+	const channelName = isAllCall ? "ALL CALL" : (state.channels[channelId]?.name || channelId);
+	emitEvent("talk", `${source.label} TALK ${channelName}${listeners ? ` -> listeners: ${listeners}` : ""}`);
+}
+
+function relayAudioChunk(senderDeviceId: string, channelId: string, sampleRate: number, audio: string): void {
+	const isAllCall = channelId === "all";
+	const listenerIds = new Set(
+		Object.values(state.devices)
+			.filter(
+				(d) =>
+					d.id !== senderDeviceId &&
+					(isAllCall || (d.listenChannelIds.includes(channelId) && matrixAllows(senderDeviceId, d.id, channelId)))
+			)
+			.map((d) => d.id)
+	);
+
+	if (listenerIds.size === 0) return;
+
+	const msg = JSON.stringify({
+		type: "audio_chunk",
+		payload: { fromDeviceId: senderDeviceId, channelId, sampleRate, audio },
+	});
+
+	wsDeviceMap.forEach((deviceId, ws) => {
+		if (listenerIds.has(deviceId) && (ws as unknown as { readyState: number }).readyState === 1) {
+			(ws as unknown as { send: (data: string) => void }).send(msg);
+		}
+	});
+}
+
+let voskWarningEmitted = false;
+
+function handleTranscriptionAudio(payload: Extract<ClientMessage, { type: "transcribe_audio" }>["payload"]): void {
+	const device = ensureDevice(payload.id);
+	if (!device) {
+		console.error(`[Transcription] Device not found: ${payload.id} (known devices: ${Object.keys(state.devices).join(", ")})`);
+		return;
+	}
+
+	// Relay audio to all devices currently listening on this channel (independent of Vosk)
+	if (device.talkChannelId === payload.channelId || device.talkChannelId === "all") {
+		relayAudioChunk(payload.id, payload.channelId, payload.sampleRate || 16000, payload.audio);
+	}
+
+	const assignedUser = ensureUser(device.userId);
+	if (assignedUser && !assignedUser.permissions.transcriptionChannelIds.includes(payload.channelId)) {
+		console.warn(`[Transcription] User ${assignedUser.name} is not allowed to transcribe ${payload.channelId}`);
+		return;
+	}
+
+	const selected = device.transcriptionChannelIds || [];
+	if (!selected.includes(payload.channelId)) {
+		console.warn(`[Transcription] Channel ${payload.channelId} not in transcription list for ${device.label}. Enabled channels: ${selected.join(", ")}`);
+		return;
+	}
+
+	const recognizer = ensureRecognizer(payload.id, payload.channelId, payload.sampleRate || 16000);
+	if (!recognizer) {
+		if (!voskWarningEmitted && voskRuntime.disabledReason) {
+			voskWarningEmitted = true;
+			console.warn(`[Vosk] Not available: ${voskRuntime.disabledReason}`);
+			emitEvent("system", `Transcription disabled: ${voskRuntime.disabledReason}`);
+		}
+		return;
+	}
+
+	const pcm = Buffer.from(payload.audio, "base64");
+	if (pcm.length === 0) {
+		return;
+	}
+
+	try {
+		const isFinal = Boolean(recognizer.acceptWaveform(pcm));
+		if (!isFinal) {
+			return;
+		}
+
+		const text = parseVoskText(recognizer.result());
+		if (!text) {
+			return;
+		}
+
+		const channelName = state.channels[payload.channelId]?.name || payload.channelId;
+		emitEvent("transcript", `[${channelName}] ${device.label}: ${text}`);
+	} catch {
+		emitEvent("system", `Transcription error on ${device.label}/${payload.channelId}`);
+	}
+}
+
+function upsertMatrixRoute(route: MatrixRoute): void {
+	const existing = state.matrixRoutes.find(
+		(item) =>
+			item.fromDeviceId === route.fromDeviceId &&
+			item.toDeviceId === route.toDeviceId &&
+			item.channelId === route.channelId
+	);
+
+	if (existing) {
+		existing.enabled = route.enabled;
+		return;
+	}
+
+	state.matrixRoutes.push(route);
+}
+
+function handleMessage(message: ClientMessage): void {
+	switch (message.type) {
+		case "register_antenna": {
+			const antenna: DectAntenna = {
+				id: message.payload.id,
+				label: message.payload.label,
+				location: message.payload.location,
+				online: true,
+				connectedDeviceIds: ensureAntenna(message.payload.id)?.connectedDeviceIds || [],
+				lastSeenAt: now(),
+			};
+			state.antennas[antenna.id] = antenna;
+			emitEvent("register", `Antenna ${antenna.label} registered (${antenna.location})`);
+			break;
+		}
+		case "register_device": {
+			const existing = ensureDevice(message.payload.id);
+			const next: BeltpackDevice = {
+				id: message.payload.id,
+				label: message.payload.label || existing?.label || message.payload.id,
+				role: message.payload.role || existing?.role || "beltpack",
+				transport: message.payload.transport,
+				userId: message.payload.userId || existing?.userId,
+				channelIds: message.payload.channelIds || existing?.channelIds || ["ch1"],
+				talkChannelId: existing?.talkChannelId,
+				listenChannelIds: existing?.listenChannelIds || ["ch1"],
+				transcriptionChannelIds: existing?.transcriptionChannelIds || [],
+				battery: existing?.battery || {
+					percent: message.payload.transport === "ethernet" ? 100 : 85,
+					charging: message.payload.transport === "ethernet",
+					source: message.payload.transport === "ethernet" ? "poe" : "battery",
+				},
+				network: existing?.network || {
+					online: true,
+					signal: message.payload.transport === "dect" ? 78 : 100,
+					ip: "0.0.0.0",
+					latencyMs: message.payload.transport === "dect" ? 28 : 8,
+				},
+				audio: existing?.audio || defaultAudioSettings(message.payload.transport),
+				connectedAntennaId: message.payload.connectedAntennaId || existing?.connectedAntennaId,
+				lastSeenAt: now(),
+			};
+
+			applyUserPermissions(next);
+
+			state.devices[next.id] = next;
+			assignDeviceToUser(next.id, next.userId);
+
+			if (next.connectedAntennaId && state.antennas[next.connectedAntennaId]) {
+				const antenna = state.antennas[next.connectedAntennaId];
+				if (!antenna.connectedDeviceIds.includes(next.id)) {
+					antenna.connectedDeviceIds.push(next.id);
+				}
+			}
+
+			emitEvent("register", `Device ${next.label} registered via ${next.transport}`);
+			break;
+		}
+		case "heartbeat": {
+			const device = ensureDevice(message.payload.id);
+			if (!device) {
+				return;
+			}
+			device.lastSeenAt = now();
+			device.battery = { ...device.battery, ...message.payload.battery };
+			device.network = { ...device.network, ...message.payload.network };
+			emitEvent("heartbeat", `Heartbeat ${device.label} (${device.transport})`);
+			break;
+		}
+		case "assign_channels": {
+			const device = ensureDevice(message.payload.id);
+			if (!device) {
+				return;
+			}
+
+			const assignedUser = ensureUser(device.userId);
+			const requested = uniqueKnownChannels(message.payload.channelIds);
+			device.channelIds = assignedUser
+				? filterByPermissions(requested, assignedUser.permissions.talkChannelIds)
+				: requested;
+			device.listenChannelIds = assignedUser
+				? filterByPermissions(requested.slice(0, 2), assignedUser.permissions.listenChannelIds)
+				: requested.slice(0, 2);
+			emitEvent("assign", `${device.label} assigned channels: ${device.channelIds.join(", ")}`);
+			break;
+		}
+		case "set_listen": {
+			const device = ensureDevice(message.payload.id);
+			if (!device) {
+				return;
+			}
+			const assignedUser = ensureUser(device.userId);
+			const requested = uniqueKnownChannels(message.payload.channelIds);
+			device.listenChannelIds = assignedUser
+				? filterByPermissions(requested, assignedUser.permissions.listenChannelIds)
+				: requested;
+			emitEvent("listen", `${device.label} listen -> ${device.listenChannelIds.join(", ") || "NONE"}`);
+			break;
+		}
+		case "set_talk": {
+			const device = ensureDevice(message.payload.id);
+			if (!device) {
+				return;
+			}
+
+			const assignedUser = ensureUser(device.userId);
+			if (assignedUser) {
+				const isAllCall = message.payload.channelId === "all";
+				if (isAllCall && !assignedUser.permissions.canAllCall) {
+					emitEvent("system", `All-call denied for ${assignedUser.name}`);
+					return;
+				}
+				if (!isAllCall && !assignedUser.permissions.talkChannelIds.includes(message.payload.channelId)) {
+					emitEvent("system", `Talk denied for ${assignedUser.name} on ${message.payload.channelId}`);
+					return;
+				}
+			}
+			if (message.payload.active) {
+				device.talkChannelId = message.payload.channelId;
+				routeTalkEvent(device.id, message.payload.channelId);
+			} else {
+				if (device.talkChannelId === message.payload.channelId) {
+					device.talkChannelId = undefined;
+					routeTalkEvent(device.id, undefined);
+				}
+			}
+			break;
+		}
+		case "set_transcription_channels": {
+			const device = ensureDevice(message.payload.id);
+			if (!device) {
+				return;
+			}
+
+			const assignedUser = ensureUser(device.userId);
+			const filtered = assignedUser
+				? filterByPermissions(uniqueKnownChannels(message.payload.channelIds), assignedUser.permissions.transcriptionChannelIds)
+				: uniqueKnownChannels(message.payload.channelIds);
+
+			const previous = new Set(device.transcriptionChannelIds || []);
+			device.transcriptionChannelIds = filtered;
+
+			previous.forEach((channelId) => {
+				if (!filtered.includes(channelId)) {
+					dropRecognizer(device.id, channelId);
+				}
+			});
+
+			emitEvent("assign", `${device.label} transcription -> ${device.transcriptionChannelIds.join(", ") || "NONE"}`);
+			break;
+		}
+		case "transcribe_audio": {
+			handleTranscriptionAudio(message.payload);
+			break;
+		}
+		case "set_user": {
+			const device = ensureDevice(message.payload.id);
+			if (!device) {
+				return;
+			}
+
+			if (message.payload.userId && !state.users[message.payload.userId]) {
+				console.warn(`[set_user] User not found: ${message.payload.userId} for device ${device.label} – skipping assignment`);
+				return;
+			}
+
+			device.userId = message.payload.userId;
+			assignDeviceToUser(device.id, message.payload.userId);
+			applyUserPermissions(device);
+			emitEvent("assign", `${device.label} user set to ${device.userId ? state.users[device.userId].name : "none"}`);
+			break;
+		}
+		default:
+			break;
+	}
+}
+
+app.get("/api/state", (_req, res) => {
+	res.json(state);
+});
+
+app.get("/api/users", (_req, res) => {
+	res.json({ ok: true, users: Object.values(state.users) });
+});
+
+app.post("/api/users", (req, res) => {
+	const id = String(req.body?.id || `user-${Math.random().toString(36).slice(2, 8)}`).trim();
+	if (!id) {
+		res.status(400).json({ ok: false, error: "Missing user id" });
+		return;
+	}
+	if (state.users[id]) {
+		res.status(400).json({ ok: false, error: "User already exists" });
+		return;
+	}
+
+	const role = (req.body?.role || "operator") as UserRole;
+	const name = String(req.body?.name || id).trim();
+	const channelIds = Object.keys(state.channels);
+	const permissions = {
+		...defaultUserPermissions(role, channelIds),
+		...(req.body?.permissions || {}),
+	};
+
+	const user: IntercomUser = {
+		id,
+		name,
+		role,
+		color: String(req.body?.color || "#2a9d8f"),
+		permissions: {
+			talkChannelIds: uniqueKnownChannels(permissions.talkChannelIds || []),
+			listenChannelIds: uniqueKnownChannels(permissions.listenChannelIds || []),
+			transcriptionChannelIds: uniqueKnownChannels(permissions.transcriptionChannelIds || []),
+			canAllCall: Boolean(permissions.canAllCall),
+			canManageDevices: Boolean(permissions.canManageDevices),
+		},
+		assignedDeviceIds: [],
+		createdAt: now(),
+		updatedAt: now(),
+	};
+
+	state.users[id] = user;
+	emitEvent("assign", `User ${user.name} created (${user.role})`);
+	res.json({ ok: true, user, state });
+});
+
+app.patch("/api/users/:id", (req, res) => {
+	const user = state.users[req.params.id];
+	if (!user) {
+		res.status(404).json({ ok: false, error: "User not found" });
+		return;
+	}
+
+	if (req.body?.name) {
+		user.name = String(req.body.name);
+	}
+	if (req.body?.color) {
+		user.color = String(req.body.color);
+	}
+	if (req.body?.role) {
+		user.role = req.body.role as UserRole;
+	}
+
+	if (req.body?.permissions) {
+		const incoming = req.body.permissions;
+		user.permissions = {
+			...user.permissions,
+			talkChannelIds: incoming.talkChannelIds ? uniqueKnownChannels(incoming.talkChannelIds) : user.permissions.talkChannelIds,
+			listenChannelIds: incoming.listenChannelIds ? uniqueKnownChannels(incoming.listenChannelIds) : user.permissions.listenChannelIds,
+			transcriptionChannelIds: incoming.transcriptionChannelIds ? uniqueKnownChannels(incoming.transcriptionChannelIds) : user.permissions.transcriptionChannelIds,
+			canAllCall: typeof incoming.canAllCall === "boolean" ? incoming.canAllCall : user.permissions.canAllCall,
+			canManageDevices: typeof incoming.canManageDevices === "boolean" ? incoming.canManageDevices : user.permissions.canManageDevices,
+		};
+	}
+
+	user.updatedAt = now();
+
+	Object.values(state.devices).forEach((device) => {
+		if (device.userId === user.id) {
+			applyUserPermissions(device);
+		}
+	});
+
+	emitEvent("assign", `User ${user.name} updated`);
+	res.json({ ok: true, user, state });
+});
+
+app.delete("/api/users/:id", (req, res) => {
+	const user = state.users[req.params.id];
+	if (!user) {
+		res.status(404).json({ ok: false, error: "User not found" });
+		return;
+	}
+	if (user.role === "admin" && Object.values(state.users).filter((u) => u.role === "admin").length <= 1) {
+		res.status(400).json({ ok: false, error: "At least one admin must remain" });
+		return;
+	}
+
+	Object.values(state.devices).forEach((device) => {
+		if (device.userId === user.id) {
+			device.userId = undefined;
+			applyUserPermissions(device);
+		}
+	});
+
+	delete state.users[user.id];
+	emitEvent("assign", `User ${user.name} removed`);
+	res.json({ ok: true, state });
+});
+
+app.patch("/api/devices/:id/user", (req, res) => {
+	const device = ensureDevice(req.params.id);
+	if (!device) {
+		res.status(404).json({ ok: false, error: "Device not found" });
+		return;
+	}
+
+	const userId = req.body?.userId ? String(req.body.userId) : undefined;
+	if (userId && !state.users[userId]) {
+		res.status(404).json({ ok: false, error: "User not found" });
+		return;
+	}
+
+	device.userId = userId;
+	assignDeviceToUser(device.id, userId);
+	applyUserPermissions(device);
+	emitEvent("assign", `${device.label} assigned to ${userId ? state.users[userId].name : "no user"}`);
+	res.json({ ok: true, state });
+});
+
+app.get("/api/transcription/status", (_req, res) => {
+	const installed = existsSync(voskRuntime.modelPath);
+	res.json({
+		ok: true,
+		installed,
+		modelPath: voskRuntime.modelPath,
+		moduleLoaded: Boolean(voskRuntime.model),
+		disabledReason: voskRuntime.disabledReason || null,
+		defaultModelUrl: DEFAULT_MODEL_URL,
+	});
+});
+
+app.get("/api/network/hosts", (_req, res) => {
+	res.json({
+		ok: true,
+		hosts: getLanHosts(),
+		serverPort: PORT,
+	});
+});
+
+app.post("/api/transcription/model/install", async (req, res) => {
+	try {
+		const url = req.body?.url ? String(req.body.url) : DEFAULT_MODEL_URL;
+		const force = Boolean(req.body?.force);
+		const result = await installVoskModel(url, force);
+		emitEvent("system", `Vosk model ready: ${result.modelPath}`);
+		res.json({ ok: true, ...result });
+	} catch (error) {
+		const message = error instanceof Error ? error.message : "Unknown install error";
+		emitEvent("system", `Vosk model install failed: ${message}`);
+		res.status(500).json({ ok: false, error: message });
+	}
+});
+
+app.get("/api/audio/plugin-bridge", (_req, res) => {
+	res.json({ ok: true, pluginBridge: state.pluginBridge });
+});
+
+app.patch("/api/audio/plugin-bridge", (req, res) => {
+	state.pluginBridge = {
+		...state.pluginBridge,
+		...req.body,
+		pluginPaths: Array.isArray(req.body?.pluginPaths) ? req.body.pluginPaths.map((v: unknown) => String(v)) : state.pluginBridge.pluginPaths,
+	};
+	emitEvent("config", `Plugin bridge updated (${state.pluginBridge.enabled ? "enabled" : "disabled"})`);
+	res.json({ ok: true, pluginBridge: state.pluginBridge });
+});
+
+// File-system browser for plugin path selection (server-local paths only)
+app.get("/api/fs/list", (req, res) => {
+	try {
+		const rawPath = typeof req.query.path === "string" ? req.query.path : "";
+		// Default to common VST dirs on Windows/Mac/Linux
+		const defaultPath = process.platform === "win32"
+			? "C:\\Program Files\\Common Files\\VST3"
+			: process.platform === "darwin"
+			? "/Library/Audio/Plug-Ins/VST3"
+			: "/usr/lib/vst3";
+		const targetPath = rawPath || defaultPath;
+		// Safety: only allow absolute paths, no traversal tricks
+		const resolved = path.resolve(targetPath);
+		if (!existsSync(resolved)) {
+			// Fall back to drive root on Windows or / elsewhere
+			const fallback = process.platform === "win32" ? "C:\\" : "/";
+			const entries = readdirSync(fallback, { withFileTypes: true }).map((e) => ({
+				name: e.name,
+				isDir: e.isDirectory(),
+				path: path.join(fallback, e.name),
+			}));
+			return res.json({ ok: true, path: fallback, entries, parent: null });
+		}
+		const entries = readdirSync(resolved, { withFileTypes: true })
+			.filter((e) => e.isDirectory() || /\.(vst3?|dll|component|so)$/i.test(e.name))
+			.map((e) => ({
+				name: e.name,
+				isDir: e.isDirectory(),
+				path: path.join(resolved, e.name),
+			}))
+			.sort((a, b) => (b.isDir ? 1 : 0) - (a.isDir ? 1 : 0) || a.name.localeCompare(b.name));
+		const parent = path.dirname(resolved) !== resolved ? path.dirname(resolved) : null;
+		res.json({ ok: true, path: resolved, entries, parent });
+	} catch (err) {
+		res.status(400).json({ ok: false, error: String(err) });
+	}
+});
+
+app.get("/api/configs", async (_req, res) => {
+	const items = await listConfigs();
+	res.json({ active: state.activeConfig.name, items });
+});
+
+app.post("/api/configs/new", async (req, res) => {
+	const name = sanitizeConfigName(req.body?.name || "default");
+	state = createInitialState(name);
+	await saveConfig(name);
+	emitEvent("config", `Created new config ${name}`);
+	res.json({ ok: true, state });
+});
+
+app.post("/api/configs/load", async (req, res) => {
+	try {
+		const name = sanitizeConfigName(req.body?.name || "default");
+		state = await loadConfig(name);
+		emitEvent("config", `Loaded config ${name}`);
+		res.json({ ok: true, state });
+	} catch {
+		res.status(404).json({ ok: false, error: "Config not found" });
+	}
+});
+
+app.post("/api/configs/save", async (req, res) => {
+	const name = req.body?.name ? sanitizeConfigName(req.body.name) : state.activeConfig.name;
+	await saveConfig(name);
+	emitEvent("config", `Saved config ${name}`);
+	res.json({ ok: true, state });
+});
+
+app.delete("/api/configs/:name", async (req, res) => {
+	const name = sanitizeConfigName(req.params.name);
+	if (name === state.activeConfig.name) {
+		res.status(400).json({ ok: false, error: "Cannot delete active config" });
+		return;
+	}
+	try {
+		await fs.unlink(configFilePath(name));
+		emitEvent("config", `Deleted config ${name}`);
+		res.json({ ok: true });
+	} catch {
+		res.status(404).json({ ok: false, error: "Config not found" });
+	}
+});
+
+app.post("/api/channels", (req, res) => {
+	const name = String(req.body?.name || "NEW").trim();
+	const color = String(req.body?.color || "#6c757d").trim();
+	const nextId = req.body?.id ? String(req.body.id) : `ch${Object.keys(state.channels).length + 1}`;
+
+	if (state.channels[nextId]) {
+		res.status(400).json({ ok: false, error: "Channel id already exists" });
+		return;
+	}
+
+	state.channels[nextId] = { id: nextId, name, color };
+	Object.values(state.users).forEach((user) => {
+		if (user.role === "admin" || user.role === "director") {
+			if (!user.permissions.talkChannelIds.includes(nextId)) {
+				user.permissions.talkChannelIds.push(nextId);
+			}
+			if (!user.permissions.listenChannelIds.includes(nextId)) {
+				user.permissions.listenChannelIds.push(nextId);
+			}
+			if (!user.permissions.transcriptionChannelIds.includes(nextId)) {
+				user.permissions.transcriptionChannelIds.push(nextId);
+			}
+			user.updatedAt = now();
+		}
+	});
+	emitEvent("assign", `Channel ${name} (${nextId}) created`);
+	res.json({ ok: true, state });
+});
+
+app.patch("/api/channels/:id", (req, res) => {
+	const channel = state.channels[req.params.id];
+	if (!channel) {
+		res.status(404).json({ ok: false, error: "Channel not found" });
+		return;
+	}
+
+	channel.name = req.body?.name ? String(req.body.name) : channel.name;
+	channel.color = req.body?.color ? String(req.body.color) : channel.color;
+	emitEvent("assign", `Channel ${channel.id} updated`);
+	res.json({ ok: true, state });
+});
+
+app.delete("/api/channels/:id", (req, res) => {
+	const channelId = req.params.id;
+	if (!state.channels[channelId]) {
+		res.status(404).json({ ok: false, error: "Channel not found" });
+		return;
+	}
+
+	delete state.channels[channelId];
+	Object.values(state.devices).forEach((device) => {
+		device.channelIds = device.channelIds.filter((id) => id !== channelId);
+		device.listenChannelIds = device.listenChannelIds.filter((id) => id !== channelId);
+		device.transcriptionChannelIds = (device.transcriptionChannelIds || []).filter((id) => id !== channelId);
+		dropRecognizer(device.id, channelId);
+		if (device.talkChannelId === channelId) {
+			device.talkChannelId = undefined;
+		}
+	});
+	state.matrixRoutes = state.matrixRoutes.filter((route) => route.channelId !== channelId);
+	Object.values(state.users).forEach((user) => {
+		user.permissions.talkChannelIds = user.permissions.talkChannelIds.filter((id) => id !== channelId);
+		user.permissions.listenChannelIds = user.permissions.listenChannelIds.filter((id) => id !== channelId);
+		user.permissions.transcriptionChannelIds = user.permissions.transcriptionChannelIds.filter((id) => id !== channelId);
+		user.updatedAt = now();
+	});
+	emitEvent("assign", `Channel ${channelId} deleted`);
+	res.json({ ok: true, state });
+});
+
+app.post("/api/devices", (req, res) => {
+	const id = String(req.body?.id || "").trim();
+	if (!id) {
+		res.status(400).json({ ok: false, error: "Missing device id" });
+		return;
+	}
+	if (state.devices[id]) {
+		res.status(400).json({ ok: false, error: "Device already exists" });
+		return;
+	}
+
+	const transport = (req.body?.transport || "ethernet") as TransportType;
+	const requestedUserId = req.body?.userId ? String(req.body.userId) : undefined;
+	const device: BeltpackDevice = {
+		id,
+		label: String(req.body?.label || id),
+		role: (req.body?.role || "beltpack") as BeltpackDevice["role"],
+		transport,
+		userId: requestedUserId,
+		channelIds: req.body?.channelIds || ["ch1"],
+		listenChannelIds: req.body?.listenChannelIds || ["ch1"],
+		transcriptionChannelIds: req.body?.transcriptionChannelIds || [],
+		talkChannelId: undefined,
+		battery: {
+			percent: transport === "ethernet" ? 100 : 90,
+			charging: transport === "ethernet",
+			source: transport === "ethernet" ? "poe" : "battery",
+		},
+		network: { online: true, signal: transport === "dect" ? 80 : 100, ip: "0.0.0.0", latencyMs: 12 },
+		audio: defaultAudioSettings(transport),
+		connectedAntennaId: req.body?.connectedAntennaId,
+		lastSeenAt: now(),
+	};
+
+	applyUserPermissions(device);
+
+	state.devices[id] = device;
+	assignDeviceToUser(id, device.userId);
+	emitEvent("register", `Device ${device.label} added manually`);
+	res.json({ ok: true, state });
+});
+
+app.patch("/api/devices/:id", (req, res) => {
+	const device = ensureDevice(req.params.id);
+	if (!device) {
+		res.status(404).json({ ok: false, error: "Device not found" });
+		return;
+	}
+
+	device.label = req.body?.label ? String(req.body.label) : device.label;
+	device.channelIds = req.body?.channelIds || device.channelIds;
+	device.listenChannelIds = req.body?.listenChannelIds || device.listenChannelIds;
+	device.transcriptionChannelIds = req.body?.transcriptionChannelIds || device.transcriptionChannelIds || [];
+	if (typeof req.body?.userId === "string" || req.body?.userId === null) {
+		device.userId = req.body?.userId || undefined;
+	}
+	if (req.body?.transport) {
+		device.transport = req.body.transport;
+	}
+	applyUserPermissions(device);
+	assignDeviceToUser(device.id, device.userId);
+	emitEvent("assign", `Device ${device.id} updated`);
+	res.json({ ok: true, state });
+});
+
+app.patch("/api/devices/:id/audio", (req, res) => {
+	const device = ensureDevice(req.params.id);
+	if (!device) {
+		res.status(404).json({ ok: false, error: "Device not found" });
+		return;
+	}
+	device.audio = {
+		...device.audio,
+		...req.body,
+	};
+	emitEvent("assign", `Audio settings updated for ${device.label}`);
+	res.json({ ok: true, state });
+});
+
+app.delete("/api/devices/:id", (req, res) => {
+	const id = req.params.id;
+	if (!state.devices[id]) {
+		res.status(404).json({ ok: false, error: "Device not found" });
+		return;
+	}
+
+	(state.devices[id].transcriptionChannelIds || []).forEach((channelId) => {
+		dropRecognizer(id, channelId);
+	});
+
+	assignDeviceToUser(id, undefined);
+	delete state.devices[id];
+	state.matrixRoutes = state.matrixRoutes.filter((route) => route.fromDeviceId !== id && route.toDeviceId !== id);
+	Object.values(state.antennas).forEach((antenna) => {
+		antenna.connectedDeviceIds = antenna.connectedDeviceIds.filter((deviceId) => deviceId !== id);
+	});
+	emitEvent("register", `Device ${id} removed`);
+	res.json({ ok: true, state });
+});
+
+app.patch("/api/matrix", (req, res) => {
+	const fromDeviceId = String(req.body?.fromDeviceId || "");
+	const toDeviceId = String(req.body?.toDeviceId || "");
+	const channelId = String(req.body?.channelId || "");
+	const enabled = Boolean(req.body?.enabled);
+
+	if (!fromDeviceId || !toDeviceId || !channelId) {
+		res.status(400).json({ ok: false, error: "Missing matrix fields" });
+		return;
+	}
+
+	upsertMatrixRoute({ fromDeviceId, toDeviceId, channelId, enabled });
+	emitEvent("matrix", `Matrix ${fromDeviceId} -> ${toDeviceId} on ${channelId}: ${enabled ? "ON" : "OFF"}`);
+	res.json({ ok: true, state });
+});
+
+wss.on("connection", (ws) => {
+	ws.send(JSON.stringify({ type: "state", payload: state } satisfies ServerMessage));
+
+	ws.on("message", (raw) => {
+		try {
+			const parsed = JSON.parse(raw.toString()) as ClientMessage;
+			// Track which device this connection represents
+			if (parsed.type === "register_device") {
+				wsDeviceMap.set(ws, parsed.payload.id);
+			}
+			handleMessage(parsed);
+		} catch {
+			emitEvent("system", "Malformed WS message ignored");
+		}
+	});
+
+	ws.on("close", () => {
+		wsDeviceMap.delete(ws);
+	});
+});
+
+function startMockEnvironment(): void {
+	handleMessage({
+		type: "register_antenna",
+		payload: { id: "ant-1", label: "DECT ANTENNA A", location: "Main Stage FOH" },
+	});
+
+	handleMessage({
+		type: "register_device",
+		payload: {
+			id: "bp-dect-1",
+			label: "BP Wireless 1",
+			transport: "dect",
+			channelIds: ["ch1", "ch2"],
+			connectedAntennaId: "ant-1",
+		},
+	});
+
+	handleMessage({
+		type: "register_device",
+		payload: {
+			id: "bp-eth-1",
+			label: "BP PoE 1",
+			transport: "ethernet",
+			channelIds: ["ch1", "ch3", "ch4"],
+		},
+	});
+
+	handleMessage({
+		type: "register_device",
+		payload: {
+			id: "bp-wifi-1",
+			label: "BP Wifi Backup",
+			transport: "wifi",
+			channelIds: ["ch2", "ch4"],
+		},
+	});
+
+	let tick = 0;
+	setInterval(() => {
+		tick += 1;
+		const wirelessBattery = Math.max(20, 88 - tick);
+		handleMessage({
+			type: "heartbeat",
+			payload: {
+				id: "bp-dect-1",
+				battery: {
+					percent: wirelessBattery,
+					charging: tick % 6 === 0,
+					source: tick % 6 === 0 ? "usb-c" : "battery",
+				},
+				network: { online: true, signal: 65 + (tick % 20), latencyMs: 20 + (tick % 8) },
+			},
+		});
+
+		handleMessage({
+			type: "set_talk",
+			payload: {
+				id: tick % 2 === 0 ? "bp-dect-1" : "bp-eth-1",
+				channelId: tick % 3 === 0 ? "ch2" : "ch1",
+				active: true,
+			},
+		});
+
+		if (tick % 3 === 0) {
+			handleMessage({
+				type: "set_talk",
+				payload: {
+					id: "bp-dect-1",
+					channelId: "ch2",
+					active: false,
+				},
+			});
+		}
+	}, 4000);
+}
+
+async function initializeState(): Promise<void> {
+	await ensureConfigDir();
+	const items = await listConfigs();
+	if (items.length > 0) {
+		state = await loadConfig(items[0].name);
+	} else {
+		state = createInitialState("default");
+		await saveConfig("default");
+	}
+
+	const currentChannelIds = Object.keys(state.channels);
+	if (Object.keys(state.users).length === 0) {
+		state.users = createDefaultUsers(currentChannelIds);
+	}
+
+	const adminCount = Object.values(state.users).filter((user) => user.role === "admin").length;
+	if (adminCount === 0) {
+		const id = `user-admin-${Math.random().toString(36).slice(2, 6)}`;
+		state.users[id] = {
+			id,
+			name: "Recovery Admin",
+			role: "admin",
+			color: "#0a9396",
+			permissions: defaultUserPermissions("admin", currentChannelIds),
+			assignedDeviceIds: [],
+			createdAt: now(),
+			updatedAt: now(),
+		};
+	}
+
+	Object.values(state.users).forEach((user) => {
+		user.assignedDeviceIds = [];
+		user.permissions.talkChannelIds = uniqueKnownChannels(user.permissions.talkChannelIds || []);
+		user.permissions.listenChannelIds = uniqueKnownChannels(user.permissions.listenChannelIds || []);
+		user.permissions.transcriptionChannelIds = uniqueKnownChannels(user.permissions.transcriptionChannelIds || []);
+	});
+
+	Object.values(state.devices).forEach((device) => {
+		applyUserPermissions(device);
+		assignDeviceToUser(device.id, device.userId);
+	});
+
+	const discovered = await findModelDirectory(MODEL_DIR);
+	if (discovered && !existsSync(voskRuntime.modelPath)) {
+		voskRuntime.modelPath = discovered;
+	}
+
+	if (process.env.VOSK_AUTO_DOWNLOAD === "1" && !existsSync(voskRuntime.modelPath)) {
+		await installVoskModel(DEFAULT_MODEL_URL, false);
+	}
+}
+
+initializeState()
+	.then(() => {
+		if (MOCK_MODE && Object.keys(state.devices).length === 0) {
+			startMockEnvironment();
+		}
+		emitEvent("system", `Intercom core running on :${PORT}${MOCK_MODE ? " (mock mode)" : ""}`);
+		// Eagerly attempt to load Vosk so moduleLoaded reflects true state from the start
+		loadVoskIfAvailable();
+		server.listen(PORT, () => {
+			console.log(`Intercom core on http://localhost:${PORT}`);
+		});
+	})
+	.catch((error) => {
+		console.error("Failed to initialize state", error);
+		process.exit(1);
+	});

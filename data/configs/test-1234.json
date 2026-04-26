@@ -1,0 +1,40 @@
+{
+  "activeConfig": {
+    "name": "test-1234",
+    "updatedAt": 1777130315598
+  },
+  "devices": {},
+  "antennas": {},
+  "channels": {
+    "ch1": {
+      "id": "ch1",
+      "name": "DIR",
+      "color": "#c1121f"
+    },
+    "ch2": {
+      "id": "ch2",
+      "name": "CAM",
+      "color": "#0077b6"
+    },
+    "ch3": {
+      "id": "ch3",
+      "name": "AUDIO",
+      "color": "#2a9d8f"
+    },
+    "ch4": {
+      "id": "ch4",
+      "name": "STAGE",
+      "color": "#f4a261"
+    }
+  },
+  "matrixRoutes": [],
+  "pluginBridge": {
+    "enabled": false,
+    "protocol": "ws",
+    "host": "ws://127.0.0.1:39000",
+    "pluginPaths": [],
+    "preset": "",
+    "bypass": true
+  },
+  "events": []
+}

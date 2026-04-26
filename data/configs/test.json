@@ -1,0 +1,32 @@
+{
+  "activeConfig": {
+    "name": "test",
+    "updatedAt": 1777110585403
+  },
+  "devices": {},
+  "antennas": {},
+  "channels": {
+    "ch1": {
+      "id": "ch1",
+      "name": "DIR",
+      "color": "#c1121f"
+    },
+    "ch2": {
+      "id": "ch2",
+      "name": "CAM",
+      "color": "#0077b6"
+    },
+    "ch3": {
+      "id": "ch3",
+      "name": "AUDIO",
+      "color": "#2a9d8f"
+    },
+    "ch4": {
+      "id": "ch4",
+      "name": "STAGE",
+      "color": "#f4a261"
+    }
+  },
+  "matrixRoutes": [],
+  "events": []
+}

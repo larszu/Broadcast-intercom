@@ -1,0 +1,73 @@
+{
+  "activeConfig": {
+    "name": "2249",
+    "updatedAt": 1777150183129
+  },
+  "users": {
+    "user-admin": {
+      "id": "user-admin",
+      "name": "Intercom Admin",
+      "role": "admin",
+      "color": "#0a9396",
+      "permissions": {
+        "talkChannelIds": [
+          "ch1",
+          "ch2",
+          "ch3",
+          "ch4"
+        ],
+        "listenChannelIds": [
+          "ch1",
+          "ch2",
+          "ch3",
+          "ch4"
+        ],
+        "transcriptionChannelIds": [
+          "ch1",
+          "ch2",
+          "ch3",
+          "ch4"
+        ],
+        "canAllCall": true,
+        "canManageDevices": true
+      },
+      "assignedDeviceIds": [],
+      "createdAt": 1777150183129,
+      "updatedAt": 1777150183129
+    }
+  },
+  "devices": {},
+  "antennas": {},
+  "channels": {
+    "ch1": {
+      "id": "ch1",
+      "name": "DIR",
+      "color": "#c1121f"
+    },
+    "ch2": {
+      "id": "ch2",
+      "name": "CAM",
+      "color": "#0077b6"
+    },
+    "ch3": {
+      "id": "ch3",
+      "name": "AUDIO",
+      "color": "#2a9d8f"
+    },
+    "ch4": {
+      "id": "ch4",
+      "name": "STAGE",
+      "color": "#f4a261"
+    }
+  },
+  "matrixRoutes": [],
+  "pluginBridge": {
+    "enabled": false,
+    "protocol": "ws",
+    "host": "ws://127.0.0.1:39000",
+    "pluginPaths": [],
+    "preset": "",
+    "bypass": true
+  },
+  "events": []
+}

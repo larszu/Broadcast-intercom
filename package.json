@@ -1,0 +1,26 @@
+{
+  "name": "broadcast-intercom",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Prototype for mixed DECT and PoE beltpack intercom system",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "kill-ports": "npx kill-port 4000 5173 5174 --silent 2>nul || true",
+    "dev": "npm run kill-ports && concurrently -n server,web -c green,blue \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "npm run dev -w @broadcast/server",
+    "dev:web": "npm run dev -w @broadcast/web",
+    "dev:mock": "npm run kill-ports && concurrently -n server,web -c green,blue \"cross-env MOCK_DEVICES=1 npm run dev -w @broadcast/server\" \"npm:dev:web\"",
+    "build": "npm run build -w @broadcast/shared && npm run build -w @broadcast/server && npm run build -w @broadcast/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0",
+    "cross-env": "^7.0.3",
+    "kill-port": "^2.0.1"
+  },
+  "dependencies": {
+    "ffi-napi": "^4.0.3"
+  }
+}
