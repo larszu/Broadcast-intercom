@@ -8,7 +8,7 @@
     "packages/*"
   ],
   "scripts": {
-    "kill-ports": "npx kill-port 4000 5173 5174 --silent 2>nul || true",
+    "kill-ports": "kill-port 4000 5173 5174 || true",
     "dev": "npm run kill-ports && concurrently -n server,web -c green,blue \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "npm run dev -w @broadcast/server",
     "dev:web": "npm run dev -w @broadcast/web",

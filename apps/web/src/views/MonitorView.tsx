@@ -2,14 +2,12 @@
 import type { CoreState, EventItem, BeltpackDevice } from "@broadcast/shared";
 import { TranscriptView } from "./TranscriptView";
 import { useLang } from "../i18n";
-import type { AudioChunkPayload } from "../hooks/useIntercomStore";
+
 
 interface Props {
   state: CoreState;
   events: EventItem[];
-  sendWs: (msg: unknown) => void;
   api: <T = unknown>(method: "GET" | "POST" | "PATCH" | "DELETE", url: string, body?: unknown) => Promise<T>;
-  setAudioChunkHandler: (fn: ((p: AudioChunkPayload) => void) | null) => void;
   onSwitchToSetup?: () => void;
 }
 

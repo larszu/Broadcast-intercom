@@ -9,6 +9,10 @@ const emptyState: CoreState = {
   devices: {},
   antennas: {},
   channels: {},
+  groups: {},
+  temporaryChannels: [],
+  profiles: {},
+  sessions: {},
   matrixRoutes: [],
   pluginBridge: {
     enabled: false,

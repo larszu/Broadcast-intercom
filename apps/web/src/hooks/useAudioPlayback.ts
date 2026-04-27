@@ -76,7 +76,7 @@ export function useAudioPlayback(
       }
 
       const buffer = ctx.createBuffer(1, samples.length, dstRate);
-      buffer.copyToChannel(samples, 0);
+      buffer.copyToChannel(samples as Float32Array<ArrayBuffer>, 0);
 
       const source = ctx.createBufferSource();
       source.buffer = buffer;
