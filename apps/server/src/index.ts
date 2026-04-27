@@ -13,17 +13,28 @@ import { WebSocketServer } from "ws";
 import type {
 	AudioSettings,
 	BeltpackDevice,
+	Channel,
 	ClientMessage,
+	ClientSession,
 	ConfigRef,
+	ControlAction,
 	CoreState,
 	DectAntenna,
 	EventItem,
+	IntercomGroup,
 	IntercomUser,
 	MatrixRoute,
 	PluginBridgeConfig,
 	ServerMessage,
+	TemporaryChannel,
 	TransportType,
+	UserProfile,
 	UserRole,
+} from "@broadcast/shared";
+import {
+	SYSTEM_CHANNEL_ANNOUNCEMENT,
+	SYSTEM_CHANNEL_EMERGENCY,
+	SYSTEM_CHANNEL_PROGRAM,
 } from "@broadcast/shared";
 
 const PORT = Number(process.env.PORT || 4000);
@@ -34,11 +45,15 @@ const MODEL_DIR = path.resolve(__dirname, "../../../data/models");
 const DEFAULT_MODEL_URL = process.env.VOSK_MODEL_URL || "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip";
 const require = createRequire(import.meta.url);
 
-const defaultChannels = {
-	ch1: { id: "ch1", name: "DIR", color: "#c1121f" },
-	ch2: { id: "ch2", name: "CAM", color: "#0077b6" },
-	ch3: { id: "ch3", name: "AUDIO", color: "#2a9d8f" },
-	ch4: { id: "ch4", name: "STAGE", color: "#f4a261" },
+const defaultChannels: Record<string, Channel> = {
+	ch1: { id: "ch1", name: "DIR",   color: "#c1121f", type: "group" },
+	ch2: { id: "ch2", name: "CAM",   color: "#0077b6", type: "group" },
+	ch3: { id: "ch3", name: "AUDIO", color: "#2a9d8f", type: "group" },
+	ch4: { id: "ch4", name: "STAGE", color: "#f4a261", type: "group" },
+	// Die 3 System-Kanäle — immer passiv verfügbar, können nicht entfernt werden
+	[SYSTEM_CHANNEL_ANNOUNCEMENT]: { id: SYSTEM_CHANNEL_ANNOUNCEMENT, name: "Announcement", color: "#e9c46a", type: "announcement" },
+	[SYSTEM_CHANNEL_EMERGENCY]:    { id: SYSTEM_CHANNEL_EMERGENCY,    name: "Emergency",    color: "#e63946", type: "emergency"    },
+	[SYSTEM_CHANNEL_PROGRAM]:      { id: SYSTEM_CHANNEL_PROGRAM,      name: "Program",      color: "#457b9d", type: "program"      },
 };
 
 function sanitizeConfigName(input: string): string {
@@ -138,6 +153,10 @@ function createInitialState(configName: string): CoreState {
 		devices: {},
 		antennas: {},
 		channels: { ...defaultChannels },
+		groups: {},
+		temporaryChannels: [],
+		profiles: {},
+		sessions: {},
 		matrixRoutes: [],
 		pluginBridge: defaultPluginBridge(),
 		events: [],
@@ -337,6 +356,10 @@ function ensureRecognizer(deviceId: string, channelId: string, sampleRate: numbe
 
 function hydrateState(raw: Partial<CoreState>, configName: string, updatedAt?: number): CoreState {
 	const hydratedChannels = Object.keys(raw.channels || {}).length > 0 ? (raw.channels as CoreState["channels"]) : { ...defaultChannels };
+	// Systemkanäle immer erzwingen — sie dürfen nie fehlen
+	hydratedChannels[SYSTEM_CHANNEL_ANNOUNCEMENT] ??= defaultChannels[SYSTEM_CHANNEL_ANNOUNCEMENT];
+	hydratedChannels[SYSTEM_CHANNEL_EMERGENCY]    ??= defaultChannels[SYSTEM_CHANNEL_EMERGENCY];
+	hydratedChannels[SYSTEM_CHANNEL_PROGRAM]      ??= defaultChannels[SYSTEM_CHANNEL_PROGRAM];
 	const channelIds = Object.keys(hydratedChannels);
 	const hydrated: CoreState = {
 		activeConfig: {
@@ -347,6 +370,10 @@ function hydrateState(raw: Partial<CoreState>, configName: string, updatedAt?: n
 		devices: raw.devices || {},
 		antennas: raw.antennas || {},
 		channels: hydratedChannels,
+		groups: raw.groups || {},
+		temporaryChannels: [], // temporäre Kanäle werden nie persistiert
+		profiles: raw.profiles || {},
+		sessions: {}, // Sessions sind flüchtig, werden nie persistiert
 		matrixRoutes: raw.matrixRoutes || [],
 		pluginBridge: { ...defaultPluginBridge(), ...(raw.pluginBridge || {}) },
 		events: raw.events || [],
@@ -441,6 +468,31 @@ function emit(message: ServerMessage): void {
 
 function emitState(): void {
 	emit({ type: "state", payload: state });
+}
+
+/** Alias für emit — semantisch: an alle Clients senden */
+const broadcast = emit;
+
+/** Aktuellen State an alle Clients senden */
+function broadcastState(): void {
+	emitState();
+}
+
+/**
+ * Sendet eine Nachricht an alle WebSocket-Clients, deren Gerät dem angegebenen User zugewiesen ist.
+ */
+function broadcastToUser(userId: string, message: ServerMessage): void {
+	const userDeviceIds = new Set(
+		Object.values(state.devices)
+			.filter((d) => d.userId === userId)
+			.map((d) => d.id)
+	);
+	const payload = JSON.stringify(message);
+	wsDeviceMap.forEach((deviceId, ws) => {
+		if (userDeviceIds.has(deviceId) && (ws as unknown as { readyState: number }).readyState === 1) {
+			(ws as unknown as { send: (data: string) => void }).send(payload);
+		}
+	});
 }
 
 function emitEvent(type: EventItem["type"], message: string): void {
@@ -836,6 +888,40 @@ function handleMessage(message: ClientMessage): void {
 			emitEvent("assign", `${device.label} user set to ${device.userId ? state.users[device.userId].name : "none"}`);
 			break;
 		}
+		case "direct_call": {
+			const { fromDeviceId, toUserId } = message.payload;
+			if (!state.users[toUserId]) {
+				console.warn(`[direct_call] Unknown toUserId: ${toUserId}`);
+				break;
+			}
+			const tempId = `tmp-${randomUUID()}`;
+			const callerUserId = state.devices[fromDeviceId]?.userId || fromDeviceId;
+			const tempCh: TemporaryChannel = {
+				id: tempId,
+				callerUserId,
+				receiverUserId: toUserId,
+				openedAt: now(),
+				active: true,
+			};
+			state.temporaryChannels.push(tempCh);
+			// Alle Geräte des Empfängers benachrichtigen
+			broadcastToUser(toUserId, { type: "temp_channel_opened", payload: tempCh });
+			emitEvent("call", `Direct call from ${callerUserId} to ${toUserId}`);
+			broadcastState();
+			break;
+		}
+		case "direct_call_end": {
+			const { tempChannelId } = message.payload;
+			const ch = state.temporaryChannels.find((t) => t.id === tempChannelId);
+			if (ch) {
+				ch.active = false;
+				state.temporaryChannels = state.temporaryChannels.filter((t) => t.id !== tempChannelId);
+				broadcast({ type: "temp_channel_closed", payload: { tempChannelId } });
+				emitEvent("call", `Direct call ${tempChannelId} ended`);
+				broadcastState();
+			}
+			break;
+		}
 		default:
 			break;
 	}
@@ -1116,7 +1202,7 @@ app.post("/api/channels", (req, res) => {
 		return;
 	}
 
-	state.channels[nextId] = { id: nextId, name, color };
+	state.channels[nextId] = { id: nextId, name, color, type: "group" };
 	Object.values(state.users).forEach((user) => {
 		if (user.role === "admin" || user.role === "director") {
 			if (!user.permissions.talkChannelIds.includes(nextId)) {
@@ -1174,6 +1260,195 @@ app.delete("/api/channels/:id", (req, res) => {
 	});
 	emitEvent("assign", `Channel ${channelId} deleted`);
 	res.json({ ok: true, state });
+});
+
+// ─── Groups ──────────────────────────────────────────────────────────────────
+
+app.get("/api/groups", (_req, res) => {
+	res.json({ ok: true, groups: Object.values(state.groups) });
+});
+
+app.post("/api/groups", (req, res) => {
+	const id = `grp-${randomUUID().slice(0, 8)}`;
+	const name = String(req.body?.name || "New Group").trim();
+	const color = String(req.body?.color || "#6c757d").trim();
+	const group: IntercomGroup = {
+		id,
+		name,
+		color,
+		activeMemberUserIds: [],
+		createdAt: now(),
+		updatedAt: now(),
+	};
+	state.groups[id] = group;
+	emitEvent("assign", `Group ${name} created`);
+	broadcastState();
+	res.status(201).json({ ok: true, group });
+});
+
+app.patch("/api/groups/:id", (req, res) => {
+	const group = state.groups[req.params.id];
+	if (!group) {
+		res.status(404).json({ ok: false, error: "Group not found" });
+		return;
+	}
+	if (req.body?.name) group.name = String(req.body.name);
+	if (req.body?.color) group.color = String(req.body.color);
+	group.updatedAt = now();
+	emitEvent("assign", `Group ${group.name} updated`);
+	broadcastState();
+	res.json({ ok: true, group });
+});
+
+app.delete("/api/groups/:id", (req, res) => {
+	const group = state.groups[req.params.id];
+	if (!group) {
+		res.status(404).json({ ok: false, error: "Group not found" });
+		return;
+	}
+	delete state.groups[req.params.id];
+	emitEvent("assign", `Group ${group.name} deleted`);
+	broadcastState();
+	res.status(204).end();
+});
+
+// ─── Profiles (User-Presets) ──────────────────────────────────────────────────
+
+app.get("/api/profiles", (_req, res) => {
+	res.json({ ok: true, profiles: Object.values(state.profiles) });
+});
+
+app.post("/api/profiles", (req, res) => {
+	const id = `profile-${randomUUID().slice(0, 8)}`;
+	const userId = String(req.body?.userId || "").trim();
+	if (userId && !state.users[userId]) {
+		res.status(404).json({ ok: false, error: "User not found" });
+		return;
+	}
+	const profile: UserProfile = {
+		id,
+		userId,
+		name: String(req.body?.name || "New Profile").trim(),
+		slots: Array.isArray(req.body?.slots) ? req.body.slots : [],
+		companionUrl: req.body?.companionUrl ? String(req.body.companionUrl) : undefined,
+		createdAt: now(),
+		updatedAt: now(),
+	};
+	state.profiles[id] = profile;
+	emitEvent("config", `Profile ${profile.name} created`);
+	broadcastState();
+	res.status(201).json({ ok: true, profile });
+});
+
+app.patch("/api/profiles/:id", (req, res) => {
+	const profile = state.profiles[req.params.id];
+	if (!profile) {
+		res.status(404).json({ ok: false, error: "Profile not found" });
+		return;
+	}
+	if (req.body?.name) profile.name = String(req.body.name);
+	if (req.body?.companionUrl !== undefined) profile.companionUrl = req.body.companionUrl ? String(req.body.companionUrl) : undefined;
+	if (Array.isArray(req.body?.slots)) profile.slots = req.body.slots;
+	profile.updatedAt = now();
+	emitEvent("config", `Profile ${profile.name} updated`);
+	broadcastState();
+	res.json({ ok: true, profile });
+});
+
+app.delete("/api/profiles/:id", (req, res) => {
+	const profile = state.profiles[req.params.id];
+	if (!profile) {
+		res.status(404).json({ ok: false, error: "Profile not found" });
+		return;
+	}
+	delete state.profiles[req.params.id];
+	emitEvent("config", `Profile ${profile.name} deleted`);
+	broadcastState();
+	res.status(204).end();
+});
+
+// ─── Sessions (read-only, managed by WS lifecycle) ────────────────────────────
+
+app.get("/api/sessions", (_req, res) => {
+	res.json({ ok: true, sessions: Object.values(state.sessions) });
+});
+
+// ─── Control Actions (Companion-kompatibel) ───────────────────────────────────
+
+app.post("/api/control/action", (req, res) => {
+	const action = req.body?.action as ControlAction | undefined;
+	const deviceId = req.body?.deviceId ? String(req.body.deviceId) : undefined;
+	const slotIndex = typeof req.body?.slotIndex === "number" ? req.body.slotIndex : undefined;
+
+	if (!action) {
+		res.status(400).json({ ok: false, error: "Missing action" });
+		return;
+	}
+
+	const device = deviceId ? ensureDevice(deviceId) : undefined;
+
+	switch (action) {
+		case "ptt_start":
+		case "ptt_stop": {
+			if (!device) {
+				res.status(404).json({ ok: false, error: "Device not found" });
+				return;
+			}
+			const channelId = device.channelIds[slotIndex ?? 0];
+			if (!channelId) {
+				res.status(400).json({ ok: false, error: "No channel at slot index" });
+				return;
+			}
+			if (action === "ptt_start") {
+				device.talkChannelId = channelId;
+				routeTalkEvent(device.id, channelId);
+			} else {
+				device.talkChannelId = undefined;
+				routeTalkEvent(device.id, undefined);
+			}
+			broadcastState();
+			break;
+		}
+		case "mute_input": {
+			if (!device) { res.status(404).json({ ok: false, error: "Device not found" }); return; }
+			device.audio = device.audio || defaultAudioSettings(device.transport);
+			device.audio.inputGainDb = -60;
+			broadcastState();
+			break;
+		}
+		case "mute_output": {
+			if (!device) { res.status(404).json({ ok: false, error: "Device not found" }); return; }
+			device.audio = device.audio || defaultAudioSettings(device.transport);
+			device.audio.outputGainDb = -60;
+			broadcastState();
+			break;
+		}
+		case "volume_up":
+		case "volume_down": {
+			if (!device) { res.status(404).json({ ok: false, error: "Device not found" }); return; }
+			device.audio = device.audio || defaultAudioSettings(device.transport);
+			const delta = action === "volume_up" ? 3 : -3;
+			device.audio.outputGainDb = Math.max(-60, Math.min(12, device.audio.outputGainDb + delta));
+			broadcastState();
+			break;
+		}
+		case "emergency_start":
+		case "emergency_stop": {
+			const active = action === "emergency_start";
+			const emergencyChannel = state.channels[SYSTEM_CHANNEL_EMERGENCY];
+			if (emergencyChannel) {
+				emitEvent("system", `Emergency ${active ? "ACTIVATED" : "deactivated"}`);
+				broadcast({ type: "state", payload: state });
+			}
+			broadcastState();
+			break;
+		}
+		default:
+			// Weitere Actions werden per WS weitergeleitet, z.B. direct_call_start
+			broadcastState();
+	}
+
+	res.json({ ok: true, action, deviceId });
 });
 
 app.post("/api/devices", (req, res) => {
@@ -1293,14 +1568,39 @@ app.patch("/api/matrix", (req, res) => {
 });
 
 wss.on("connection", (ws) => {
+	const sessionId = randomUUID();
+	const connectedAt = now();
+
 	ws.send(JSON.stringify({ type: "state", payload: state } satisfies ServerMessage));
 
 	ws.on("message", (raw) => {
 		try {
 			const parsed = JSON.parse(raw.toString()) as ClientMessage;
-			// Track which device this connection represents
+			// Track which device this connection represents and create/update session
 			if (parsed.type === "register_device") {
-				wsDeviceMap.set(ws, parsed.payload.id);
+				const deviceId = parsed.payload.id;
+				wsDeviceMap.set(ws, deviceId);
+				const device = state.devices[deviceId];
+				const session: ClientSession = {
+					id: sessionId,
+					deviceId,
+					userId: device?.userId,
+					profileId: undefined,
+					connectedAt,
+					lastSeenAt: now(),
+					activeSlotIds: [],
+					isTalking: false,
+				};
+				state.sessions[sessionId] = session;
+				broadcastState();
+			} else if (parsed.type === "heartbeat") {
+				const session = state.sessions[sessionId];
+				if (session) {
+					session.lastSeenAt = now();
+					const device = state.devices[parsed.payload.id];
+					session.userId = device?.userId;
+					session.isTalking = Boolean(device?.talkChannelId);
+				}
 			}
 			handleMessage(parsed);
 		} catch {
@@ -1310,6 +1610,8 @@ wss.on("connection", (ws) => {
 
 	ws.on("close", () => {
 		wsDeviceMap.delete(ws);
+		delete state.sessions[sessionId];
+		broadcastState();
 	});
 });
 

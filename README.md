@@ -1,153 +1,162 @@
-# Broadcast Intercom
+﻿# Broadcast Intercom
 
-Prototyp eines browser-basierten Intercom-Systems, inspiriert von Green-GO / Riedel Bolero.  
-Unterstützt DECT- und PoE-Beltpacks sowie Web-Clients (Smartphone/Browser).
-
----
-
-## Voraussetzungen
-
-| Tool | Version | Installieren |
-|------|---------|-------------|
-| Node.js | 20 LTS (via fnm) | `winget install Schniz.fnm` |
-| npm | ≥ 10 | kommt mit Node |
-| mkcert | ≥ 1.4 | `winget install FiloSottile.mkcert` |
+A self-hosted, browser-based production intercom system for live events and broadcast productions. Inspired by the architecture of [Green-GO](https://green-go.eu) wireless intercoms and the open-source [Eyevinn Open Intercom](https://github.com/Eyevinn/intercom-manager) project.
 
 ---
 
-## Ersteinrichtung (einmalig)
+## Features
 
-### 1. Repository klonen & Abhängigkeiten installieren
+- **Group channels (Partylines)** — multi-party talk groups, each user can hold up to 8 configurable slots
+- **System channels** — three always-present channels: Announcement, Emergency, Program
+- **Direct calls** — temporary 1:1 channels that auto-open when a user initiates a call, no pre-configuration on the receiver side
+- **User Profiles / Presets** — per-user slot configuration (which groups/direct targets/system channels appear on each slot)
+- **Device Manager** — hardware beltpacks (Ethernet/DECT/WiFi) with full config; browser beltpacks via invite link
+- **Companion / StreamDeck control** — REST control endpoint compatible with [Bitfocus Companion](https://bitfocus.io/companion)
+- **Audio transcription** — optional Vosk speech-to-text per channel
+- **Plugin Bridge** — optional VST/audio plugin integration via WebSocket
 
-```bash
+---
+
+## Architecture
+
+```
+Broadcast intercom/
+├── apps/
+│   ├── server/          Node.js 20 + Express + WebSocket (port 4000)
+│   └── web/             React + Vite 6 (HTTPS port 5173)
+├── packages/
+│   └── shared/          Common TypeScript types (shared between server & web)
+└── data/
+    ├── configs/         Saved show configurations (JSON)
+    └── models/          Vosk speech model (optional)
+```
+
+**Tech stack:**
+- Runtime: Node 20.20.2 (via [fnm](https://github.com/Schniz/fnm))
+- Server: Express 4, `ws` WebSocket library, `tsx` for TypeScript execution
+- Frontend: React 18, Vite 6, CSS-only styling (no CSS framework)
+- HTTPS: [mkcert](https://github.com/FiloSottile/mkcert) local CA
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+```powershell
+winget install Schniz.fnm
+fnm install 20
+fnm use 20
+winget install FiloSottile.mkcert
+mkcert -install
+```
+
+### Installation
+
+```powershell
 git clone https://github.com/larszu/Broadcast-intercom.git
 cd "Broadcast-intercom"
 npm install
-```
 
-### 2. Node 20 als Standard setzen
-
-```powershell
-fnm install 20
-fnm default 20
-```
-
-### 3. HTTPS-Zertifikat erstellen (vertrauenswürdig, kein Browser-Warning)
-
-```powershell
-# PATH aktualisieren (neues Terminal oder nach winget-Install)
-$env:PATH = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-
-# Root-CA ins System-Truststore installieren (einmalig, braucht UAC)
-mkcert -install
-
-# Zertifikat für lokale IPs erzeugen – eigene LAN-IPs anpassen!
+# Generate HTTPS certificates
 cd apps/web
-New-Item -ItemType Directory -Force -Path certs | Out-Null
-cd certs
-mkcert localhost 127.0.0.1 <deine-LAN-IP> ::1
-cd ../../..
+mkdir certs
+mkcert -cert-file certs/localhost+4.pem -key-file certs/localhost+4-key.pem localhost 127.0.0.1 ::1 YOUR_LAN_IP
+cd ../..
 ```
 
-> **Hinweis:** Die Zertifikatsdateien liegen in `apps/web/certs/` und sind via `.gitignore` ausgeschlossen.  
-> Nach einem `git clone` auf einem neuen Rechner muss Schritt 3 wiederholt werden.
+### Running
 
-#### Mobile Geräte (iOS / Android)
-
-Damit das Schloss-Symbol auch auf Smartphones erscheint:
-1. Root-CA-Datei kopieren: `%LOCALAPPDATA%\mkcert\rootCA.pem`
-2. Per AirDrop / E-Mail auf das Gerät übertragen
-3. **iOS:** *Einstellungen → Allgemein → VPN & Geräteverwaltung → installieren*  
-   Dann: *Einstellungen → Allgemein → Info → Zertifikatvertrauenseinstellungen → aktivieren*
-4. **Android:** *Einstellungen → Sicherheit → Zertifikate installieren*
-
----
-
-## Server starten
-
-### Mit Mock-Geräten (für Entwicklung / Demo)
-
-```bash
-npm run dev:mock
-```
-
-Startet:
-- **Backend** auf `http://localhost:4000` (Express + WebSocket, simulierte Beltpacks)
-- **Frontend** auf `https://localhost:5173` (Vite, Hot-Reload)
-
-### Ohne Mock-Geräte (Echtbetrieb)
-
-```bash
+```powershell
 npm run dev
 ```
 
-### Nur Backend / nur Frontend
-
-```bash
-npm run dev:server   # nur Server auf :4000
-npm run dev:web      # nur Vite auf :5173
-```
-
-> **Port-Konflikt?** `npm run dev:mock` räumt die Ports 4000, 5173 und 5174 automatisch frei (`npm run kill-ports`).
+Open `https://localhost:5173` in your browser.
 
 ---
 
-## URLs
+## Green-GO Inspired Concepts
 
-| Interface | URL |
-|-----------|-----|
-| Host-Dashboard | `https://localhost:5173/` |
-| Web-Client (Smartphone) | `https://<LAN-IP>:5173/?mode=client` |
-| Web-Client mit festem User | `https://<LAN-IP>:5173/?mode=client&userId=<id>` |
-| QR-Code-Provisioning | Im Host-Dashboard unter *Devices* |
+| Concept | This System |
+|---|---|
+| Group (Partyline) | `IntercomGroup` + `Channel` with `type: "group"` |
+| Direct Call | `TemporaryChannel` — auto-created, no receiver pre-config needed |
+| User Config | `UserProfile` with `ChannelSlot[]` (up to 8 slots per user) |
+| System Channels | `__sys_announcement__`, `__sys_emergency__`, `__sys_program__` — always present |
+| Channel Slot | `ChannelSlot` — each slot points to a group, direct target, or system channel |
 
-### Erster Start des Web-Clients
-
-Beim ersten Öffnen von `?mode=client` erscheint ein **Setup-Screen**:
-- **Gerätename** eingeben (z. B. `Reporter Bühne 1`)
-- Optional einen **Benutzer** aus der Liste auswählen
-- Mit **Weiter →** bestätigen
-
-Name und User werden in `localStorage` gespeichert — beim nächsten Öffnen wird der Setup-Screen übersprungen.  
-Über das ⚙-Symbol oben rechts kann die Einrichtung jederzeit erneut geöffnet werden.
+Each slot in a `UserProfile` can be one of:
+- `{ type: "group", groupId }` — talk/listen to a group
+- `{ type: "direct", userId }` — dedicated button for direct call to a user
+- `{ type: "system", channelId }` — always-on system channel
 
 ---
 
-## Build (Produktion)
+## Eyevinn-Inspired Concepts
 
-```bash
-npm run build
-```
-
-Erzeugt kompilierte Ausgabe in `apps/server/dist/` und `apps/web/dist/`.
-
----
-
-## Projektstruktur
-
-```
-apps/
-  server/          Express + WebSocket Backend (TypeScript, tsx)
-    src/index.ts   Haupt-Einstiegspunkt: Devices, Users, Channels, Vosk
-  web/             React + Vite Frontend
-    src/
-      views/
-        HostDashboard.tsx   Host-Interface (Geräteverwaltung, Kanäle, Logs)
-        PhoneClient.tsx     Mobiler Web-Client (PTT, Kanäle, Mic-Meter)
-      hooks/
-        useIntercomStore.ts WebSocket-State-Management
-    certs/          mkcert-Zertifikate (gitignore'd)
-packages/
-  shared/          Gemeinsame TypeScript-Typen (CoreState, IntercomUser, …)
-```
+| Eyevinn Term | This System |
+|---|---|
+| Production | Config / Show configuration |
+| Line | Channel / Group |
+| Preset | `UserProfile` |
+| Session/Participant | `ClientSession` |
+| Companion Actions | `ControlAction` via `POST /api/control/action` |
 
 ---
 
-## Bekannte Einschränkungen
+## API Reference
 
-- **Vosk-Transkription** benötigt ein lokal heruntergeladenes Sprachmodell unter `apps/server/models/`.  
-  Ohne Modell läuft der Server trotzdem — Transkription ist einfach deaktiviert.
-- **HTTPS ist Pflicht** für `getUserMedia` (Mikrofon) in modernen Browsern, auch im LAN.
-- **HMR auf Mobilgeräten** ist deaktiviert (`hmr.host: "localhost"`) — Vite-Neuladen von Dateien  
-  während der Entwicklung betrifft nur den lokalen Browser, nicht angeschlossene Smartphones.
+### WebSocket (`ws://localhost:4000`)
 
+**Client → Server:**
+
+| Type | Payload |
+|---|---|
+| `register_device` | `{ id, label, transport, role?, userId?, channelIds? }` |
+| `heartbeat` | `{ id, battery?, network? }` |
+| `set_talk` | `{ id, channelId, active }` |
+| `set_listen` | `{ id, channelIds }` |
+| `set_user` | `{ id, userId? }` |
+| `direct_call` | `{ fromDeviceId, toUserId }` |
+| `direct_call_end` | `{ tempChannelId }` |
+| `transcribe_audio` | `{ id, channelId, sampleRate, audio }` |
+
+**Server → Client:**
+
+| Type | Payload |
+|---|---|
+| `state` | Full `CoreState` |
+| `event` | `EventItem` |
+| `audio_chunk` | `{ fromDeviceId, channelId, sampleRate, audio }` |
+| `temp_channel_opened` | `TemporaryChannel` |
+| `temp_channel_closed` | `{ tempChannelId }` |
+
+### REST Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/state` | Full state |
+| GET/POST | `/api/users` | List / create users |
+| PATCH/DELETE | `/api/users/:id` | Update / delete user |
+| POST | `/api/channels` | Create channel |
+| PATCH/DELETE | `/api/channels/:id` | Update / delete channel |
+| GET/POST | `/api/groups` | List / create groups |
+| PATCH/DELETE | `/api/groups/:id` | Update / delete group |
+| GET/POST | `/api/profiles` | List / create profiles |
+| PATCH/DELETE | `/api/profiles/:id` | Update / delete profile |
+| GET | `/api/sessions` | Active WebSocket sessions |
+| POST | `/api/control/action` | Companion control action |
+| POST | `/api/devices` | Add device |
+| PATCH/DELETE | `/api/devices/:id` | Update / delete device |
+| GET/PATCH | `/api/audio/plugin-bridge` | Plugin bridge config |
+| GET | `/api/network/hosts` | LAN IP addresses |
+| GET | `/api/fs/list?path=` | Server-side file browser |
+
+**`ControlAction` values:**
+`ptt_start`, `ptt_stop`, `mute_input`, `mute_output`, `set_selected_slot`, `volume_up`, `volume_down`, `direct_call_start`, `direct_call_end`, `emergency_start`, `emergency_stop`
+
+---
+
+## License
+
+MIT
