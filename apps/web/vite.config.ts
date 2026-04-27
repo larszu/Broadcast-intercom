@@ -14,11 +14,11 @@ export default defineConfig({
       key: fs.readFileSync(path.resolve(__dirname, "certs/localhost+4-key.pem")),
       cert: fs.readFileSync(path.resolve(__dirname, "certs/localhost+4.pem")),
     },
-    port: 5174,
+    port: 5200,
     hmr: {
       protocol: "wss",
       host: "localhost",
-      clientPort: 5174,
+      clientPort: 5200,
     },
     proxy: {
       "/api": "http://localhost:4001",
