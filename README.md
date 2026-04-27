@@ -22,8 +22,8 @@ A self-hosted, browser-based production intercom system for live events and broa
 ```
 Broadcast intercom/
 ├── apps/
-│   ├── server/          Node.js 20 + Express + WebSocket (port 4000)
-│   └── web/             React + Vite 6 (HTTPS port 5173)
+│   ├── server/          Node.js 20 + Express + WebSocket (port 4001)
+│   └── web/             React + Vite 6 (HTTPS port 5174)
 ├── packages/
 │   └── shared/          Common TypeScript types (shared between server & web)
 └── data/
@@ -71,7 +71,7 @@ cd ../..
 npm run dev
 ```
 
-Open `https://localhost:5173` in your browser.
+Open `https://localhost:5174` in your browser.
 
 ---
 
@@ -106,7 +106,7 @@ Each slot in a `UserProfile` can be one of:
 
 ## API Reference
 
-### WebSocket (`ws://localhost:4000`)
+### WebSocket (`ws://localhost:4001`)
 
 **Client → Server:**
 

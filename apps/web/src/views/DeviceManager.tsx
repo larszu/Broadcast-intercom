@@ -13,10 +13,83 @@ interface NetworkHostsResponse {
   serverPort: number;
 }
 
-const TRANSPORTS: TransportType[] = ["ethernet", "wifi"];
+const TRANSPORTS: TransportType[] = ["ethernet", "wifi", "dect"];
 
 function isWebClientDevice(device: BeltpackDevice): boolean {
   return device.transport === "wifi" && device.id.startsWith("web-");
+}
+
+// ─── Add hardware device form ─────────────────────────────────────────────────
+function AddDeviceForm({ state, api }: { state: CoreState; api: Props["api"] }) {
+  const [open, setOpen] = useState(false);
+  const [id, setId] = useState("");
+  const [label, setLabel] = useState("");
+  const [transport, setTransport] = useState<TransportType>("ethernet");
+  const [userId, setUserId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const users = Object.values(state.users);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const trimId = id.trim();
+    if (!trimId) { setError("ID darf nicht leer sein."); return; }
+    setSaving(true);
+    setError("");
+    try {
+      await api("POST", "/api/devices", {
+        id: trimId,
+        label: label.trim() || trimId,
+        transport,
+        userId: userId || undefined,
+      });
+      setId(""); setLabel(""); setTransport("ethernet"); setUserId("");
+      setOpen(false);
+    } catch {
+      setError("Fehler beim Hinzufügen.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="dmAddDevice">
+      {!open ? (
+        <button className="btnPrimary" onClick={() => setOpen(true)}>+ Gerät hinzufügen</button>
+      ) : (
+        <form className="dmAddForm" onSubmit={e => void submit(e)}>
+          <h4 className="dmAddFormTitle">Neues Gerät</h4>
+          <div className="dmEditRow">
+            <label>Geräte-ID *</label>
+            <input className="textInput" value={id} onChange={e => setId(e.target.value)} placeholder="z. B. bp-studio-1" />
+          </div>
+          <div className="dmEditRow">
+            <label>Anzeigename</label>
+            <input className="textInput" value={label} onChange={e => setLabel(e.target.value)} placeholder="Wird ID wenn leer" />
+          </div>
+          <div className="dmEditRow">
+            <label>Transport</label>
+            <select className="textInput" value={transport} onChange={e => setTransport(e.target.value as TransportType)}>
+              {TRANSPORTS.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div className="dmEditRow">
+            <label>Benutzer</label>
+            <select className="textInput" value={userId} onChange={e => setUserId(e.target.value)}>
+              <option value="">Nicht zugewiesen</option>
+              {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          </div>
+          {error && <p className="dmAddError">{error}</p>}
+          <div className="dmEditActions">
+            <button className="btnPrimary" type="submit" disabled={saving}>{saving ? "…" : "Hinzufügen"}</button>
+            <button className="btnGhost" type="button" onClick={() => { setOpen(false); setError(""); }}>Abbrechen</button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
 }
 
 function QrImage({ url, label }: { url: string; label: string }) {
@@ -215,14 +288,13 @@ export function DeviceManager({ state, api }: Props) {
       <h2>Geräte</h2>
 
       {/* Hardware devices */}
-      {hardwareDevices.length > 0 && (
-        <section className="dmSection">
-          <h3 className="dmSectionTitle">Hardware-Geräte</h3>
-          {hardwareDevices.map(d => (
-            <HardwareAccordion key={d.id} device={d} state={state} api={api} />
-          ))}
-        </section>
-      )}
+      <section className="dmSection">
+        <h3 className="dmSectionTitle">Hardware-Geräte</h3>
+        {hardwareDevices.map(d => (
+          <HardwareAccordion key={d.id} device={d} state={state} api={api} />
+        ))}
+        <AddDeviceForm state={state} api={api} />
+      </section>
 
       {/* Browser beltpacks */}
       <section className="dmSection">

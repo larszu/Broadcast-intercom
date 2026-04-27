@@ -37,7 +37,7 @@ import {
 	SYSTEM_CHANNEL_PROGRAM,
 } from "@broadcast/shared";
 
-const PORT = Number(process.env.PORT || 4000);
+const PORT = Number(process.env.PORT || 4001);
 const MOCK_MODE = process.env.MOCK_DEVICES === "1";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_DIR = path.resolve(__dirname, "../../../data/configs");

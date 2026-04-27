@@ -1,7 +1,49 @@
 {
   "activeConfig": {
     "name": "test",
-    "updatedAt": 1777110585403
+    "updatedAt": 1777288145527
+  },
+  "users": {
+    "user-admin": {
+      "id": "user-admin",
+      "name": "Intercom Admin",
+      "role": "admin",
+      "color": "#0a9396",
+      "permissions": {
+        "talkChannelIds": [
+          "ch1",
+          "ch2",
+          "ch3",
+          "ch4",
+          "__sys_announcement__",
+          "__sys_emergency__",
+          "__sys_program__"
+        ],
+        "listenChannelIds": [
+          "ch1",
+          "ch2",
+          "ch3",
+          "ch4",
+          "__sys_announcement__",
+          "__sys_emergency__",
+          "__sys_program__"
+        ],
+        "transcriptionChannelIds": [
+          "ch1",
+          "ch2",
+          "ch3",
+          "ch4",
+          "__sys_announcement__",
+          "__sys_emergency__",
+          "__sys_program__"
+        ],
+        "canAllCall": true,
+        "canManageDevices": true
+      },
+      "assignedDeviceIds": [],
+      "createdAt": 1777288145527,
+      "updatedAt": 1777288145527
+    }
   },
   "devices": {},
   "antennas": {},
@@ -9,24 +51,58 @@
     "ch1": {
       "id": "ch1",
       "name": "DIR",
-      "color": "#c1121f"
+      "color": "#c1121f",
+      "type": "group"
     },
     "ch2": {
       "id": "ch2",
       "name": "CAM",
-      "color": "#0077b6"
+      "color": "#0077b6",
+      "type": "group"
     },
     "ch3": {
       "id": "ch3",
       "name": "AUDIO",
-      "color": "#2a9d8f"
+      "color": "#2a9d8f",
+      "type": "group"
     },
     "ch4": {
       "id": "ch4",
       "name": "STAGE",
-      "color": "#f4a261"
+      "color": "#f4a261",
+      "type": "group"
+    },
+    "__sys_announcement__": {
+      "id": "__sys_announcement__",
+      "name": "Announcement",
+      "color": "#e9c46a",
+      "type": "announcement"
+    },
+    "__sys_emergency__": {
+      "id": "__sys_emergency__",
+      "name": "Emergency",
+      "color": "#e63946",
+      "type": "emergency"
+    },
+    "__sys_program__": {
+      "id": "__sys_program__",
+      "name": "Program",
+      "color": "#457b9d",
+      "type": "program"
     }
   },
+  "groups": {},
+  "temporaryChannels": [],
+  "profiles": {},
+  "sessions": {},
   "matrixRoutes": [],
+  "pluginBridge": {
+    "enabled": false,
+    "protocol": "ws",
+    "host": "ws://127.0.0.1:39000",
+    "pluginPaths": [],
+    "preset": "",
+    "bypass": true
+  },
   "events": []
 }

@@ -938,3 +938,17 @@ input:focus, select:focus, textarea:focus {
   border-radius: 5px; padding: 5px 8px;
 }
 .pluginPathText { flex: 1; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* --- DeviceManager: Add Device Form --------------------------------------- */
+.dmAddDevice { margin-top: 10px; }
+.dmAddForm {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dmAddFormTitle { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
+.dmAddError { color: #e74c3c; font-size: 12px; margin: 0; }
