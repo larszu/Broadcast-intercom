@@ -19,8 +19,5 @@
     "concurrently": "^9.2.0",
     "cross-env": "^7.0.3",
     "kill-port": "^2.0.1"
-  },
-  "dependencies": {
-    "ffi-napi": "^4.0.3"
   }
 }
