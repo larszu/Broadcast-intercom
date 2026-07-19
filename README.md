@@ -1,7 +1,8 @@
-﻿# Broadcast Intercom
+# Broadcast Intercom
 
 A self-hosted, browser-based production intercom system for live events and broadcast productions. Inspired by the architecture of [Green-GO](https://green-go.eu) wireless intercoms and the open-source [Eyevinn Open Intercom](https://github.com/Eyevinn/intercom-manager) project.
 
+--- currenty under development 
 ---
 
 ## Features
