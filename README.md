@@ -1,4 +1,4 @@
-﻿# Broadcast Intercom
+# Broadcast Intercom
 
 A self-hosted, browser-based production intercom system for live events and broadcast productions. Inspired by the architecture of [Green-GO](https://green-go.eu) wireless intercoms and the open-source [Eyevinn Open Intercom](https://github.com/Eyevinn/intercom-manager) project.
 
@@ -10,8 +10,9 @@ A self-hosted, browser-based production intercom system for live events and broa
 - **System channels** — three always-present channels: Announcement, Emergency, Program
 - **Direct calls** — temporary 1:1 channels that auto-open when a user initiates a call, no pre-configuration on the receiver side
 - **User Profiles / Presets** — per-user slot configuration (which groups/direct targets/system channels appear on each slot)
+- **Role-based permissions** — `admin`, `director`, `operator`, `talent` roles gate talk/listen/transcription and management rights
 - **Device Manager** — hardware beltpacks (Ethernet/DECT/WiFi) with full config; browser beltpacks via invite link
-- **Companion / StreamDeck control** — REST control endpoint compatible with [Bitfocus Companion](https://bitfocus.io/companion)
+- **Companion / Stream Deck control** — REST control endpoint plus a ready-to-use [Bitfocus Companion module](companion-module/) (`companion-module/`)
 - **Audio transcription** — optional Vosk speech-to-text per channel
 - **Plugin Bridge** — optional VST/audio plugin integration via WebSocket
 
@@ -20,22 +21,25 @@ A self-hosted, browser-based production intercom system for live events and broa
 ## Architecture
 
 ```
-Broadcast intercom/
+Broadcast-intercom/
 ├── apps/
-│   ├── server/          Node.js 20 + Express + WebSocket (port 4001)
-│   └── web/             React + Vite 6 (HTTPS port 5174)
+│   ├── server/            Node.js + Express + WebSocket core (port 4001)
+│   └── web/               React + Vite 6 operator UI (dev port 5200)
 ├── packages/
-│   └── shared/          Common TypeScript types (shared between server & web)
+│   └── shared/            Common TypeScript types (shared between server & web)
+├── companion-module/      Bitfocus Companion module for Stream Deck control
+├── scripts/
+│   └── smoke-test.mjs     Headless REST + WebSocket functional test
 └── data/
-    ├── configs/         Saved show configurations (JSON)
-    └── models/          Vosk speech model (optional)
+    ├── configs/           Saved show configurations (JSON)
+    └── models/            Vosk speech model (optional)
 ```
 
 **Tech stack:**
-- Runtime: Node 20.20.2 (via [fnm](https://github.com/Schniz/fnm))
+- Runtime: Node 20 (via [fnm](https://github.com/Schniz/fnm); `.node-version` pins 20)
 - Server: Express 4, `ws` WebSocket library, `tsx` for TypeScript execution
-- Frontend: React 18, Vite 6, CSS-only styling (no CSS framework)
-- HTTPS: [mkcert](https://github.com/FiloSottile/mkcert) local CA
+- Frontend: React 19, Vite 6, CSS-only styling (no CSS framework)
+- HTTPS (optional): [mkcert](https://github.com/FiloSottile/mkcert) local CA — the dev server falls back to plain HTTP when no certificates are present
 
 ---
 
@@ -47,31 +51,82 @@ Broadcast intercom/
 winget install Schniz.fnm
 fnm install 20
 fnm use 20
+# Optional — only needed for HTTPS / microphone access on a LAN:
 winget install FiloSottile.mkcert
 mkcert -install
 ```
 
+> On macOS/Linux use your package manager (`brew install fnm mkcert`, etc.). Node 20+ is required; the project runs on Node 22 as well.
+
 ### Installation
 
-```powershell
+```bash
 git clone https://github.com/larszu/Broadcast-intercom.git
-cd "Broadcast-intercom"
+cd Broadcast-intercom
 npm install
+```
 
-# Generate HTTPS certificates
+**Optional — HTTPS certificates** (needed for microphone access from other devices on the LAN):
+
+```bash
 cd apps/web
 mkdir certs
 mkcert -cert-file certs/localhost+4.pem -key-file certs/localhost+4-key.pem localhost 127.0.0.1 ::1 YOUR_LAN_IP
 cd ../..
 ```
 
+Without certificates the web dev server automatically serves plain HTTP — everything still works for local development.
+
 ### Running
 
-```powershell
-npm run dev
+```bash
+npm run dev            # server (:4001) + web UI (:5200)
+npm run dev:mock       # same, with simulated beltpacks generating live traffic
+npm run dev:server     # server only (useful for headless testing / Companion)
 ```
 
-Open `https://localhost:5174` in your browser.
+Open **http://localhost:5200** (or `https://` if you generated certificates).
+
+---
+
+## Testing (headless)
+
+The core can be fully exercised without a browser. Start the server, then run the smoke test:
+
+```bash
+npm run dev:server          # terminal 1
+npm run test:smoke          # terminal 2  (override target with BASE=http://host:port)
+```
+
+`scripts/smoke-test.mjs` verifies the REST CRUD surface, the Companion control
+endpoint (PTT / mute / volume / emergency, including error paths), config
+persistence, and the WebSocket lifecycle (device registration, talk events,
+direct-call temporary channels).
+
+The Companion module has its own end-to-end test that drives the real module
+logic against a running core — see [`companion-module/`](companion-module/).
+
+To confirm everything compiles:
+
+```bash
+npm run build               # builds shared → server → web
+```
+
+---
+
+## Bitfocus Companion module
+
+[`companion-module/`](companion-module/) is a full [Bitfocus Companion](https://bitfocus.io/companion)
+connection module that turns a Stream Deck into an intercom control surface:
+
+- **Actions** — push-to-talk (slot or named channel), mute/unmute, volume, emergency, direct call start/end, load config
+- **Feedbacks** — device talking, muted, offline, battery low, emergency active, core connected
+- **Variables** — connection state, active config, device/user/channel counts, and per-device talk/battery/online values
+- **Presets** — ready-to-drop PTT, mute, volume, emergency and status buttons
+
+It keeps a live WebSocket to the core for instant feedback and sends commands to
+`POST /api/control/action`. See the [module README](companion-module/README.md)
+for install, build and test instructions.
 
 ---
 
@@ -106,16 +161,22 @@ Each slot in a `UserProfile` can be one of:
 
 ## API Reference
 
-### WebSocket (`ws://localhost:4001`)
+### WebSocket (`ws://localhost:4001/ws`)
+
+On connect the server immediately sends a full `state` message; thereafter it
+pushes `state` / `event` messages on every change.
 
 **Client → Server:**
 
 | Type | Payload |
 |---|---|
-| `register_device` | `{ id, label, transport, role?, userId?, channelIds? }` |
+| `register_device` | `{ id, label, transport, role?, userId?, channelIds?, connectedAntennaId? }` |
+| `register_antenna` | `{ id, label, location }` |
 | `heartbeat` | `{ id, battery?, network? }` |
+| `assign_channels` | `{ id, channelIds }` |
 | `set_talk` | `{ id, channelId, active }` |
 | `set_listen` | `{ id, channelIds }` |
+| `set_transcription_channels` | `{ id, channelIds }` |
 | `set_user` | `{ id, userId? }` |
 | `direct_call` | `{ fromDeviceId, toUserId }` |
 | `direct_call_end` | `{ tempChannelId }` |
@@ -131,7 +192,7 @@ Each slot in a `UserProfile` can be one of:
 | `temp_channel_opened` | `TemporaryChannel` |
 | `temp_channel_closed` | `{ tempChannelId }` |
 
-### REST Endpoints
+### REST endpoints
 
 | Method | Path | Description |
 |---|---|---|
@@ -144,16 +205,40 @@ Each slot in a `UserProfile` can be one of:
 | PATCH/DELETE | `/api/groups/:id` | Update / delete group |
 | GET/POST | `/api/profiles` | List / create profiles |
 | PATCH/DELETE | `/api/profiles/:id` | Update / delete profile |
-| GET | `/api/sessions` | Active WebSocket sessions |
-| POST | `/api/control/action` | Companion control action |
 | POST | `/api/devices` | Add device |
 | PATCH/DELETE | `/api/devices/:id` | Update / delete device |
+| PATCH | `/api/devices/:id/audio` | Update device audio settings |
+| PATCH | `/api/devices/:id/user` | Assign device to user |
+| GET | `/api/sessions` | Active WebSocket sessions |
+| POST | `/api/control/action` | Companion control action |
+| PATCH | `/api/matrix` | Set a matrix route (from → to on channel) |
 | GET/PATCH | `/api/audio/plugin-bridge` | Plugin bridge config |
-| GET | `/api/network/hosts` | LAN IP addresses |
-| GET | `/api/fs/list?path=` | Server-side file browser |
+| GET | `/api/transcription/status` | Vosk model / module status |
+| POST | `/api/transcription/model/install` | Download & install a Vosk model |
+| GET | `/api/configs` | List saved configs + active |
+| POST | `/api/configs/new` \| `/load` \| `/save` | Create / load / save a config |
+| DELETE | `/api/configs/:name` | Delete a saved config |
+| GET | `/api/network/hosts` | LAN IP addresses + server port |
+| GET | `/api/fs/list?path=` | Server-side file browser (plugin paths) |
 
-**`ControlAction` values:**
+**`ControlAction` values (`POST /api/control/action`):**
 `ptt_start`, `ptt_stop`, `mute_input`, `mute_output`, `set_selected_slot`, `volume_up`, `volume_down`, `direct_call_start`, `direct_call_end`, `emergency_start`, `emergency_stop`
+
+Request body: `{ action, deviceId?, slotIndex? }`. Actions that target a device
+(`ptt_*`, `mute_*`, `volume_*`) require a valid `deviceId`; `ptt_*` uses
+`slotIndex` to pick the channel from the device's assigned channels.
+
+---
+
+## Environment variables (server)
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `4001` | Core HTTP/WebSocket port |
+| `MOCK_DEVICES` | – | Set to `1` to spawn simulated beltpacks (`npm run dev:mock`) |
+| `VOSK_MODEL_PATH` | `data/models/vosk-model-small-en-us-0.15` | Path to an unpacked Vosk model |
+| `VOSK_MODEL_URL` | small en-us model | Model download URL |
+| `VOSK_AUTO_DOWNLOAD` | – | Set to `1` to download the model on first start |
 
 ---
 
