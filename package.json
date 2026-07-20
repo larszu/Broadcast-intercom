@@ -8,12 +8,13 @@
     "packages/*"
   ],
   "scripts": {
-    "kill-ports": "kill-port 4000 5173 5174 || true",
+    "kill-ports": "kill-port 4001 5200 || true",
     "dev": "concurrently -n server,web -c green,blue \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "npm run dev -w @broadcast/server",
     "dev:web": "npm run dev -w @broadcast/web",
     "dev:mock": "concurrently -n server,web -c green,blue \"cross-env MOCK_DEVICES=1 npm run dev -w @broadcast/server\" \"npm:dev:web\"",
-    "build": "npm run build -w @broadcast/shared && npm run build -w @broadcast/server && npm run build -w @broadcast/web"
+    "build": "npm run build -w @broadcast/shared && npm run build -w @broadcast/server && npm run build -w @broadcast/web",
+    "test:smoke": "node scripts/smoke-test.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.2.0",
