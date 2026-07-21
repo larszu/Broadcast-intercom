@@ -2,7 +2,8 @@
 
 A self-hosted, browser-based production intercom system for live events and broadcast productions. Inspired by the architecture of [Green-GO](https://green-go.eu) wireless intercoms and the open-source [Eyevinn Open Intercom](https://github.com/Eyevinn/intercom-manager) project.
 
---- currenty under development 
+> ⚠️ **Currently under development.**
+
 ---
 
 ## Features
@@ -16,6 +17,46 @@ A self-hosted, browser-based production intercom system for live events and broa
 - **Companion / Stream Deck control** — REST control endpoint plus a ready-to-use [Bitfocus Companion module](companion-module/) (`companion-module/`)
 - **Audio transcription** — optional Vosk speech-to-text per channel
 - **Plugin Bridge** — optional VST/audio plugin integration via WebSocket
+
+---
+
+## Screenshots
+
+### Operator UI — Monitor
+Live view of every beltpack: transport (ETH/DECT/WiFi), assigned user and channel, and who is currently talking (highlighted red).
+
+![Monitor view](docs/screenshots/02-monitor.png)
+
+### Setup — Channels & Routing
+Manage group and system channels and the point-to-point talk **routing matrix** between devices.
+
+![Channels & routing](docs/screenshots/03-channels.png)
+
+### Setup — Devices & Users
+Hardware and browser beltpacks on the left; users, roles and per-channel talk/listen/transcription permissions on the right. A QR code / invite link turns any phone or tablet into a browser beltpack.
+
+![Devices & users](docs/screenshots/04-devices.png)
+
+### Setup — Audio & Plugin Bridge
+Per-device audio settings and the optional VST/audio plugin bridge configuration.
+
+![Audio settings](docs/screenshots/05-audio.png)
+
+### Browser beltpack (phone / tablet)
+Open the client link on any device to turn it into an independent beltpack — pick a name and user (left), then push-to-talk with per-channel listen and live talk indicators (right).
+
+<p>
+  <img src="docs/screenshots/07-phone-client.png" alt="Browser beltpack onboarding" width="32%">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/08-phone-beltpack.png" alt="Browser beltpack push-to-talk" width="32%">
+</p>
+
+### Start screen
+Create a new show configuration or open a saved one.
+
+![Start screen](docs/screenshots/01-start.png)
+
+> Screens are captured from the running app with seeded demo data (`docs/screenshots/`).
 
 ---
 
