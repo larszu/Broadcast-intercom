@@ -46,12 +46,81 @@ export interface UserPermissions {
   canManageDevices: boolean;
 }
 
+/**
+ * Wie eine Talk-Taste sich verhält (Green-GO "ReplyMode"):
+ *   "ptt"       – Momentary: sprechen nur solange gedrückt/gehalten
+ *   "latch"     – Rastend: einmal antippen an, erneut antippen aus
+ *   "handsfree" – Dauersprechen (offenes Mikro), bis manuell beendet
+ */
+export type ReplyMode = "ptt" | "latch" | "handsfree";
+
+/**
+ * Wann ein eingehender Ruf/Talk automatisch als Popup angezeigt wird
+ * (Green-GO "PopupMode"):
+ *   "off"  – nie automatisch aufpoppen
+ *   "call" – nur bei Direktrufen aufpoppen
+ *   "talk" – nur bei aktivem Talk auf einem gehörten Kanal aufpoppen
+ *   "all"  – bei Rufen und Talk aufpoppen
+ */
+export type PopupMode = "off" | "call" | "talk" | "all";
+
+/**
+ * Advanced Call Behavior — pro User konfigurierbares Ruf-/Talk-Verhalten,
+ * abgeleitet aus dem Green-GO gg5 `Settings`-Block einer Station.
+ * Wird im State gehalten, propagiert an alle Clients des Users und in der
+ * Config persistiert.
+ */
+export interface CallBehaviorSettings {
+  /** Talk-Tasten-Verhalten (momentary/rastend/handsfree). */
+  replyMode: ReplyMode;
+  /**
+   * Wie stark andere Kanäle abgesenkt werden, während ein Prioritäts-/
+   * Notfall-Talk aktiv ist, in dB (<= 0). Green-GO "PriorityDim".
+   */
+  priorityDimDb: number;
+  /**
+   * Isolate/Solo: nur der aktuell gewählte Kanal wird gehört, alle anderen
+   * werden stummgeschaltet. Green-GO "Isolate".
+   */
+  isolate: boolean;
+  /**
+   * Wie lange eine Ruf-/Cue-Anzeige stehen bleibt, in Sekunden.
+   * Green-GO "CueTimeout".
+   */
+  cueTimeoutSec: number;
+  /** Popup-Verhalten bei eingehenden Rufen/Talk. Green-GO "PopupMode". */
+  popupMode: PopupMode;
+  /** Ob bei eingehendem Ruf ein Alarmton abgespielt wird. Green-GO "AlertTone". */
+  alertTone: boolean;
+  /** Pegel des Alarm-/Ruftons in dB (<= 0). Green-GO "ToneLevel". */
+  toneLevelDb: number;
+  /**
+   * Automatische Freigabe eines rastenden Talks nach N Sekunden
+   * (0 = nie automatisch freigeben). Green-GO "ActiveTime".
+   */
+  activeTimeSec: number;
+}
+
+/** Standard-Werte für Advanced Call Behavior (an Green-GO-Defaults angelehnt). */
+export const defaultCallBehavior = (): CallBehaviorSettings => ({
+  replyMode: "ptt",
+  priorityDimDb: -6,
+  isolate: false,
+  cueTimeoutSec: 3,
+  popupMode: "call",
+  alertTone: false,
+  toneLevelDb: -12,
+  activeTimeSec: 0,
+});
+
 export interface IntercomUser {
   id: string;
   name: string;
   role: UserRole;
   color: string;
   permissions: UserPermissions;
+  /** Advanced Call Behavior (Ruf-/Talk-Verhalten), siehe CallBehaviorSettings. */
+  callBehavior: CallBehaviorSettings;
   assignedDeviceIds: string[];
   createdAt: number;
   updatedAt: number;

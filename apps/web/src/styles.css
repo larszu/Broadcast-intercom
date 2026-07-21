@@ -195,6 +195,9 @@ input:focus, select:focus, textarea:focus {
 .editSection p { font-size: 12px; color: var(--text2); margin-bottom: 6px; }
 .checkGrid { display: flex; gap: 12px; flex-wrap: wrap; }
 .checkGrid label { display: flex; gap: 6px; align-items: center; }
+.callBehaviorGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 10px; }
+.callBehaviorGrid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text2); }
+.callBehaviorGrid input, .callBehaviorGrid select { width: 100%; }
 .webClientProvisioning { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
 .webClientProvisioningMeta { display: flex; flex-direction: column; gap: 6px; min-width: 240px; flex: 1; }
 .webClientProvisioningMeta a { color: var(--accent); word-break: break-all; }

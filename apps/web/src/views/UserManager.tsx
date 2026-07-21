@@ -1,5 +1,13 @@
 import { useState } from "react";
-import type { CoreState, IntercomUser, UserRole } from "@broadcast/shared";
+import type {
+  CallBehaviorSettings,
+  CoreState,
+  IntercomUser,
+  PopupMode,
+  ReplyMode,
+  UserRole,
+} from "@broadcast/shared";
+import { defaultCallBehavior } from "@broadcast/shared";
 
 interface Props {
   state: CoreState;
@@ -7,6 +15,19 @@ interface Props {
 }
 
 const USER_ROLES: UserRole[] = ["admin", "director", "operator", "talent"];
+
+const REPLY_MODES: { value: ReplyMode; label: string }[] = [
+  { value: "ptt", label: "Momentary (PTT)" },
+  { value: "latch", label: "Rastend (Latch)" },
+  { value: "handsfree", label: "Handsfree" },
+];
+
+const POPUP_MODES: { value: PopupMode; label: string }[] = [
+  { value: "off", label: "Aus" },
+  { value: "call", label: "Nur Direktruf" },
+  { value: "talk", label: "Nur Talk" },
+  { value: "all", label: "Alle" },
+];
 
 function toggleInList(list: string[], id: string): string[] {
   return list.includes(id) ? list.filter((item) => item !== id) : [...list, id];
@@ -28,6 +49,11 @@ export function UserManager({ state, api }: Props) {
   const [editTrxChannels, setEditTrxChannels] = useState<string[]>([]);
   const [editCanAllCall, setEditCanAllCall] = useState(false);
   const [editCanManageDevices, setEditCanManageDevices] = useState(false);
+  const [editCallBehavior, setEditCallBehavior] = useState<CallBehaviorSettings>(defaultCallBehavior());
+
+  function patchCallBehavior(patch: Partial<CallBehaviorSettings>) {
+    setEditCallBehavior((prev) => ({ ...prev, ...patch }));
+  }
 
   async function addUser() {
     const name = createName.trim();
@@ -56,6 +82,7 @@ export function UserManager({ state, api }: Props) {
         canAllCall: editCanAllCall,
         canManageDevices: editCanManageDevices,
       },
+      callBehavior: editCallBehavior,
     });
     setEditId(null);
   }
@@ -77,6 +104,7 @@ export function UserManager({ state, api }: Props) {
     setEditTrxChannels(user.permissions.transcriptionChannelIds || []);
     setEditCanAllCall(Boolean(user.permissions.canAllCall));
     setEditCanManageDevices(Boolean(user.permissions.canManageDevices));
+    setEditCallBehavior({ ...defaultCallBehavior(), ...(user.callBehavior || {}) });
   }
 
   return (
@@ -180,6 +208,92 @@ export function UserManager({ state, api }: Props) {
                   </label>
                 </div>
 
+                <div className="editSection">
+                  <p>Advanced Call Behavior</p>
+                  <div className="callBehaviorGrid">
+                    <label>
+                      Reply-Modus
+                      <select
+                        value={editCallBehavior.replyMode}
+                        onChange={(event) => patchCallBehavior({ replyMode: event.target.value as ReplyMode })}
+                      >
+                        {REPLY_MODES.map((mode) => (
+                          <option key={mode.value} value={mode.value}>{mode.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Popup-Modus
+                      <select
+                        value={editCallBehavior.popupMode}
+                        onChange={(event) => patchCallBehavior({ popupMode: event.target.value as PopupMode })}
+                      >
+                        {POPUP_MODES.map((mode) => (
+                          <option key={mode.value} value={mode.value}>{mode.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Priority Dim (dB)
+                      <input
+                        type="number"
+                        min={-60}
+                        max={0}
+                        value={editCallBehavior.priorityDimDb}
+                        onChange={(event) => patchCallBehavior({ priorityDimDb: Number(event.target.value) })}
+                      />
+                    </label>
+                    <label>
+                      Ton-Pegel (dB)
+                      <input
+                        type="number"
+                        min={-60}
+                        max={0}
+                        value={editCallBehavior.toneLevelDb}
+                        onChange={(event) => patchCallBehavior({ toneLevelDb: Number(event.target.value) })}
+                      />
+                    </label>
+                    <label>
+                      Cue-Timeout (s)
+                      <input
+                        type="number"
+                        min={0}
+                        max={60}
+                        value={editCallBehavior.cueTimeoutSec}
+                        onChange={(event) => patchCallBehavior({ cueTimeoutSec: Number(event.target.value) })}
+                      />
+                    </label>
+                    <label>
+                      Active-Time (s, 0 = aus)
+                      <input
+                        type="number"
+                        min={0}
+                        max={600}
+                        value={editCallBehavior.activeTimeSec}
+                        onChange={(event) => patchCallBehavior({ activeTimeSec: Number(event.target.value) })}
+                      />
+                    </label>
+                  </div>
+                  <div className="checkGrid">
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={editCallBehavior.isolate}
+                        onChange={(event) => patchCallBehavior({ isolate: event.target.checked })}
+                      />
+                      Isolate (Solo)
+                    </label>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={editCallBehavior.alertTone}
+                        onChange={(event) => patchCallBehavior({ alertTone: event.target.checked })}
+                      />
+                      Alarmton bei Ruf
+                    </label>
+                  </div>
+                </div>
+
                 <div className="actionRow">
                   <button onClick={() => saveUser(user.id)}>Save</button>
                   <button onClick={() => setEditId(null)}>Cancel</button>
@@ -196,7 +310,11 @@ export function UserManager({ state, api }: Props) {
                   Assigned: {user.assignedDeviceIds.length > 0 ? user.assignedDeviceIds.join(", ") : "none"}<br />
                   Talk: {user.permissions.talkChannelIds.map((id) => state.channels[id]?.name || id).join(", ") || "none"}<br />
                   Listen: {user.permissions.listenChannelIds.map((id) => state.channels[id]?.name || id).join(", ") || "none"}<br />
-                  Transcription: {user.permissions.transcriptionChannelIds.map((id) => state.channels[id]?.name || id).join(", ") || "none"}
+                  Transcription: {user.permissions.transcriptionChannelIds.map((id) => state.channels[id]?.name || id).join(", ") || "none"}<br />
+                  Call: {(user.callBehavior?.replyMode || "ptt")}
+                  {user.callBehavior?.isolate ? " · isolate" : ""}
+                  {user.callBehavior?.alertTone ? " · alertTone" : ""}
+                  {user.callBehavior?.activeTimeSec ? ` · active ${user.callBehavior.activeTimeSec}s` : ""}
                 </small>
                 <div className="actionRow">
                   <button onClick={() => startEdit(user)}>Edit</button>
