@@ -87,6 +87,16 @@ async function run() {
 	const patched = await api("PATCH", "/api/users/user-smoke", { name: "Renamed" });
 	check("PATCH user name", patched.json?.user?.name === "Renamed");
 
+	// ── Advanced Call Behavior ──
+	check("new user has default callBehavior", created.json?.user?.callBehavior?.replyMode === "ptt");
+	const cbPatch = await api("PATCH", "/api/users/user-smoke", {
+		callBehavior: { replyMode: "latch", activeTimeSec: 1, priorityDimDb: -999, isolate: true },
+	});
+	check("PATCH callBehavior replyMode", cbPatch.json?.user?.callBehavior?.replyMode === "latch");
+	check("PATCH callBehavior clamps priorityDimDb to -60", cbPatch.json?.user?.callBehavior?.priorityDimDb === -60);
+	check("PATCH callBehavior isolate flag", cbPatch.json?.user?.callBehavior?.isolate === true);
+	check("PATCH callBehavior activeTimeSec", cbPatch.json?.user?.callBehavior?.activeTimeSec === 1);
+
 	// ── Channels / Groups / Profiles ──
 	const chan = await api("POST", "/api/channels", { id: "chSmoke", name: "SMOKE", color: "#123456" });
 	check("POST /api/channels → 200", chan.status === 200 && chan.json?.state?.channels?.chSmoke);
@@ -128,6 +138,15 @@ async function run() {
 	check("WS register_device reflected in state", Boolean((await nextMsg(ws, (m) => m.type === "state" && m.payload?.devices?.["ws-smoke-1"]))?.payload?.devices?.["ws-smoke-1"]));
 	ws.send(JSON.stringify({ type: "set_talk", payload: { id: "ws-smoke-1", channelId: "ch1", active: true } }));
 	check("WS set_talk produces talk event", /TALK/.test((await nextMsg(ws, (m) => m.type === "event" && /TALK/.test(m.payload?.message || "")))?.payload?.message || ""));
+
+	// ── ActiveTime auto-release (user-smoke has activeTimeSec=1 from PATCH above) ──
+	await api("PATCH", "/api/devices/ws-smoke-1/user", { userId: "user-smoke" });
+	ws.send(JSON.stringify({ type: "set_talk", payload: { id: "ws-smoke-1", channelId: "ch1", active: true } }));
+	await new Promise((r) => setTimeout(r, 300));
+	check("talk active before auto-release", Boolean((await api("GET", "/api/state")).json?.devices?.["ws-smoke-1"]?.talkChannelId));
+	await new Promise((r) => setTimeout(r, 1200));
+	check("talk auto-released after ActiveTime", !(await api("GET", "/api/state")).json?.devices?.["ws-smoke-1"]?.talkChannelId);
+
 	ws.send(JSON.stringify({ type: "direct_call", payload: { fromDeviceId: "ws-smoke-1", toUserId: "user-smoke" } }));
 	check("WS direct_call opens temp channel", Boolean(await nextMsg(ws, (m) => m.type === "temp_channel_opened" || (m.type === "state" && m.payload?.temporaryChannels?.length > 0), 4000).catch(() => null)));
 	ws.close();

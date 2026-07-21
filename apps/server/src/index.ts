@@ -13,6 +13,7 @@ import { WebSocketServer } from "ws";
 import type {
 	AudioSettings,
 	BeltpackDevice,
+	CallBehaviorSettings,
 	Channel,
 	ClientMessage,
 	ClientSession,
@@ -25,6 +26,8 @@ import type {
 	IntercomUser,
 	MatrixRoute,
 	PluginBridgeConfig,
+	PopupMode,
+	ReplyMode,
 	ServerMessage,
 	TemporaryChannel,
 	TransportType,
@@ -32,6 +35,7 @@ import type {
 	UserRole,
 } from "@broadcast/shared";
 import {
+	defaultCallBehavior,
 	SYSTEM_CHANNEL_ANNOUNCEMENT,
 	SYSTEM_CHANNEL_EMERGENCY,
 	SYSTEM_CHANNEL_PROGRAM,
@@ -129,6 +133,44 @@ function defaultUserPermissions(role: UserRole, channels: string[]) {
 	};
 }
 
+const REPLY_MODES: ReplyMode[] = ["ptt", "latch", "handsfree"];
+const POPUP_MODES: PopupMode[] = ["off", "call", "talk", "all"];
+
+function clampDb(value: unknown, fallback: number, min = -60, max = 0): number {
+	const n = Number(value);
+	if (!Number.isFinite(n)) {
+		return fallback;
+	}
+	return Math.max(min, Math.min(max, n));
+}
+
+function clampSeconds(value: unknown, fallback: number, min = 0, max = 600): number {
+	const n = Number(value);
+	if (!Number.isFinite(n)) {
+		return fallback;
+	}
+	return Math.max(min, Math.min(max, Math.round(n)));
+}
+
+/**
+ * Validiert/normalisiert eingehende Call-Behavior-Werte und füllt fehlende
+ * Felder aus den Defaults auf (dient zugleich als Schema-Migration für
+ * ältere Configs ohne `callBehavior`).
+ */
+function sanitizeCallBehavior(raw: unknown, base: CallBehaviorSettings = defaultCallBehavior()): CallBehaviorSettings {
+	const input = (raw && typeof raw === "object" ? raw : {}) as Partial<CallBehaviorSettings>;
+	return {
+		replyMode: REPLY_MODES.includes(input.replyMode as ReplyMode) ? (input.replyMode as ReplyMode) : base.replyMode,
+		priorityDimDb: clampDb(input.priorityDimDb, base.priorityDimDb),
+		isolate: typeof input.isolate === "boolean" ? input.isolate : base.isolate,
+		cueTimeoutSec: clampSeconds(input.cueTimeoutSec, base.cueTimeoutSec, 0, 60),
+		popupMode: POPUP_MODES.includes(input.popupMode as PopupMode) ? (input.popupMode as PopupMode) : base.popupMode,
+		alertTone: typeof input.alertTone === "boolean" ? input.alertTone : base.alertTone,
+		toneLevelDb: clampDb(input.toneLevelDb, base.toneLevelDb),
+		activeTimeSec: clampSeconds(input.activeTimeSec, base.activeTimeSec, 0, 600),
+	};
+}
+
 function createDefaultUsers(channels: string[]): Record<string, IntercomUser> {
 	const ts = now();
 	return {
@@ -138,6 +180,7 @@ function createDefaultUsers(channels: string[]): Record<string, IntercomUser> {
 			role: "admin",
 			color: "#0a9396",
 			permissions: defaultUserPermissions("admin", channels),
+			callBehavior: defaultCallBehavior(),
 			assignedDeviceIds: [],
 			createdAt: ts,
 			updatedAt: ts,
@@ -388,6 +431,7 @@ function hydrateState(raw: Partial<CoreState>, configName: string, updatedAt?: n
 
 	Object.values(hydrated.users).forEach((user) => {
 		user.permissions = user.permissions || defaultUserPermissions(user.role, channelIds);
+		user.callBehavior = sanitizeCallBehavior(user.callBehavior);
 		user.assignedDeviceIds = user.assignedDeviceIds || [];
 	});
 
@@ -444,6 +488,44 @@ const wss = new WebSocketServer({ server, path: "/ws" });
 
 // Map ws connection → registered device ID (updated on register_device)
 const wsDeviceMap = new Map<import("ws").WebSocket, string>();
+
+// Auto-Release-Timer pro Gerät (Green-GO "ActiveTime"): ein rastender/offener
+// Talk wird nach `callBehavior.activeTimeSec` Sekunden automatisch beendet.
+const talkAutoReleaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function clearTalkAutoRelease(deviceId: string): void {
+	const timer = talkAutoReleaseTimers.get(deviceId);
+	if (timer) {
+		clearTimeout(timer);
+		talkAutoReleaseTimers.delete(deviceId);
+	}
+}
+
+/**
+ * Plant die automatische Talk-Freigabe für ein Gerät ein, sofern der
+ * zugewiesene User ein `activeTimeSec > 0` konfiguriert hat. Läuft der Timer
+ * ab und spricht das Gerät weiterhin auf demselben Kanal, wird der Talk
+ * serverseitig beendet und der State neu verteilt.
+ */
+function scheduleTalkAutoRelease(device: BeltpackDevice, channelId: string): void {
+	clearTalkAutoRelease(device.id);
+	const user = ensureUser(device.userId);
+	const seconds = user?.callBehavior?.activeTimeSec ?? 0;
+	if (seconds <= 0) {
+		return;
+	}
+	const timer = setTimeout(() => {
+		talkAutoReleaseTimers.delete(device.id);
+		const current = ensureDevice(device.id);
+		if (current && current.talkChannelId === channelId) {
+			current.talkChannelId = undefined;
+			routeTalkEvent(current.id, undefined);
+			emitEvent("system", `${current.label} talk auto-released after ${seconds}s (ActiveTime)`);
+			broadcastState();
+		}
+	}, seconds * 1000);
+	talkAutoReleaseTimers.set(device.id, timer);
+}
 
 function pushEvent(type: EventItem["type"], message: string): EventItem {
 	const event: EventItem = {
@@ -836,11 +918,13 @@ function handleMessage(message: ClientMessage): void {
 			if (message.payload.active) {
 				device.talkChannelId = message.payload.channelId;
 				routeTalkEvent(device.id, message.payload.channelId);
+				scheduleTalkAutoRelease(device, message.payload.channelId);
 			} else {
 				if (device.talkChannelId === message.payload.channelId) {
 					device.talkChannelId = undefined;
 					routeTalkEvent(device.id, undefined);
 				}
+				clearTalkAutoRelease(device.id);
 			}
 			break;
 		}
@@ -966,6 +1050,7 @@ app.post("/api/users", (req, res) => {
 			canAllCall: Boolean(permissions.canAllCall),
 			canManageDevices: Boolean(permissions.canManageDevices),
 		},
+		callBehavior: sanitizeCallBehavior(req.body?.callBehavior),
 		assignedDeviceIds: [],
 		createdAt: now(),
 		updatedAt: now(),
@@ -1003,6 +1088,15 @@ app.patch("/api/users/:id", (req, res) => {
 			canAllCall: typeof incoming.canAllCall === "boolean" ? incoming.canAllCall : user.permissions.canAllCall,
 			canManageDevices: typeof incoming.canManageDevices === "boolean" ? incoming.canManageDevices : user.permissions.canManageDevices,
 		};
+	}
+
+	if (req.body?.callBehavior) {
+		// Bestehende Werte als Basis: partielle Updates überschreiben nur die
+		// mitgeschickten Felder, der Rest bleibt erhalten.
+		user.callBehavior = sanitizeCallBehavior(
+			{ ...user.callBehavior, ...req.body.callBehavior },
+			user.callBehavior,
+		);
 	}
 
 	user.updatedAt = now();
@@ -1402,9 +1496,11 @@ app.post("/api/control/action", (req, res) => {
 			if (action === "ptt_start") {
 				device.talkChannelId = channelId;
 				routeTalkEvent(device.id, channelId);
+				scheduleTalkAutoRelease(device, channelId);
 			} else {
 				device.talkChannelId = undefined;
 				routeTalkEvent(device.id, undefined);
+				clearTalkAutoRelease(device.id);
 			}
 			broadcastState();
 			break;
@@ -1541,6 +1637,7 @@ app.delete("/api/devices/:id", (req, res) => {
 		dropRecognizer(id, channelId);
 	});
 
+	clearTalkAutoRelease(id);
 	assignDeviceToUser(id, undefined);
 	delete state.devices[id];
 	state.matrixRoutes = state.matrixRoutes.filter((route) => route.fromDeviceId !== id && route.toDeviceId !== id);
@@ -1715,6 +1812,7 @@ async function initializeState(): Promise<void> {
 			role: "admin",
 			color: "#0a9396",
 			permissions: defaultUserPermissions("admin", currentChannelIds),
+			callBehavior: defaultCallBehavior(),
 			assignedDeviceIds: [],
 			createdAt: now(),
 			updatedAt: now(),
@@ -1726,6 +1824,7 @@ async function initializeState(): Promise<void> {
 		user.permissions.talkChannelIds = uniqueKnownChannels(user.permissions.talkChannelIds || []);
 		user.permissions.listenChannelIds = uniqueKnownChannels(user.permissions.listenChannelIds || []);
 		user.permissions.transcriptionChannelIds = uniqueKnownChannels(user.permissions.transcriptionChannelIds || []);
+		user.callBehavior = sanitizeCallBehavior(user.callBehavior);
 	});
 
 	Object.values(state.devices).forEach((device) => {
