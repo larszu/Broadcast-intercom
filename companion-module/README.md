@@ -78,4 +78,4 @@ PTT, mute/unmute, emergency and the derived feedbacks all round-trip correctly.
 
 ## License
 
-MIT
+Proprietär — © 2026 Lars Zumpe, alle Rechte vorbehalten. Nutzung der veröffentlichten Builds ist kostenlos; Weiterverbreitung und abgeleitete Werke sind es nicht. Siehe [LICENSE](LICENSE).

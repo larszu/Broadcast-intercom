@@ -24,5 +24,6 @@
   },
   "optionalDependencies": {
     "vosk": "^0.3.39"
-  }
+  },
+  "license": "UNLICENSED"
 }
