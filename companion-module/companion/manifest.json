@@ -5,7 +5,7 @@
 	"shortname": "Intercom",
 	"description": "Control the Broadcast Intercom core: push-to-talk, mute, volume, direct calls and emergency, with live talk/battery/emergency feedback.",
 	"version": "1.0.0",
-	"license": "MIT",
+	"license": "UNLICENSED",
 	"repository": "git+https://github.com/larszu/Broadcast-intercom.git",
 	"bugs": "https://github.com/larszu/Broadcast-intercom/issues",
 	"maintainers": [
@@ -22,6 +22,15 @@
 		"entrypoint": "../src/index.js"
 	},
 	"manufacturer": "Broadcast Intercom",
-	"products": ["Broadcast Intercom Core"],
-	"keywords": ["intercom", "beltpack", "partyline", "PTT", "broadcast", "green-go"]
+	"products": [
+		"Broadcast Intercom Core"
+	],
+	"keywords": [
+		"intercom",
+		"beltpack",
+		"partyline",
+		"PTT",
+		"broadcast",
+		"green-go"
+	]
 }
