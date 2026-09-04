@@ -1,0 +1,77 @@
+# ───────────────────────────────────────────────────────────────────────────
+# CI — der Smoke-Test lief bis hierher nur, wenn ihn jemand von Hand startete.
+#
+# Das Repo hatte keine CI und galt deshalb als das am schlechtesten belegte der
+# acht. Gemessen ist das Gegenteil der Fall: `scripts/smoke-test.mjs` faehrt 38
+# Pruefungen gegen einen laufenden Kern -- REST, Companion-Control-Endpunkt,
+# WebSocket-Protokoll, PTT mit Auto-Release nach ActiveTime, Direktruf mit
+# temporaerem Kanal, Anlegen und Loeschen von Kanaelen/Gruppen/Nutzern/Geraeten
+# -- und sie sind gruen. Es fehlte nicht die Funktion, sondern die Automatik.
+#
+# Gestartet wird der GEBAUTE Server (`apps/server/dist/index.js`), nicht der
+# `tsx watch`-Entwicklungslauf: in CI soll laufen, was der Build erzeugt, und
+# ein Watcher haelt den Job unnoetig am Leben.
+#
+# `MOCK_DEVICES=1`, weil auf dem Runner keine Beltpacks haengen.
+# ───────────────────────────────────────────────────────────────────────────
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    name: Build + Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build (shared + server + web)
+        run: npm run build
+
+      - name: Kern starten
+        run: |
+          MOCK_DEVICES=1 node apps/server/dist/index.js > /tmp/intercom.log 2>&1 &
+          echo $! > /tmp/intercom.pid
+
+      - name: Auf Bereitschaft warten
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf --max-time 2 http://localhost:4001/api/state >/dev/null 2>&1; then
+              echo "Kern bereit nach ${i}s"
+              exit 0
+            fi
+            # Stirbt der Prozess, ist Weiterwarten sinnlos -- dann lieber sofort
+            # mit dem Log abbrechen, statt 60 Sekunden lang zu schweigen.
+            if ! kill -0 "$(cat /tmp/intercom.pid)" 2>/dev/null; then
+              echo "Kern ist gestorben:"
+              cat /tmp/intercom.log
+              exit 1
+            fi
+            sleep 1
+          done
+          echo "Kern wurde nicht bereit:"
+          cat /tmp/intercom.log
+          exit 1
+
+      - name: Smoke-Test (38 Pruefungen)
+        run: npm run test:smoke
+
+      - name: Server-Log bei Fehlschlag
+        if: failure()
+        run: cat /tmp/intercom.log || true
+
+      - name: Kern stoppen
+        if: always()
+        run: kill "$(cat /tmp/intercom.pid)" 2>/dev/null || true
