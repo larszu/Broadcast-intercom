@@ -14,7 +14,8 @@
     "dev:web": "npm run dev -w @broadcast/web",
     "dev:mock": "concurrently -n server,web -c green,blue \"cross-env MOCK_DEVICES=1 npm run dev -w @broadcast/server\" \"npm:dev:web\"",
     "build": "npm run build -w @broadcast/shared && npm run build -w @broadcast/server && npm run build -w @broadcast/web",
-    "test:smoke": "node scripts/smoke-test.mjs"
+    "test:smoke": "node scripts/smoke-test.mjs",
+    "docs:reachable": "node scripts/docs-reachable.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.2.0",

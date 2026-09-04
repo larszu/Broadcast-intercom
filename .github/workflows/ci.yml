@@ -40,6 +40,12 @@ jobs:
       - name: Build (shared + server + web)
         run: npm run build
 
+      # Alle drei Dokumente unter docs/ waren bis 2026-09-04 von keiner
+      # Einstiegsseite aus verlinkt -- auch docs/README.md selbst, das bereits
+      # ein gutes Inhaltsverzeichnis war, das nur niemand verlinkte.
+      - name: Dokumentation ist auffindbar
+        run: npm run docs:reachable
+
       - name: Kern starten
         run: |
           MOCK_DEVICES=1 node apps/server/dist/index.js > /tmp/intercom.log 2>&1 &

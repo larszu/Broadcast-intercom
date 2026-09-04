@@ -60,6 +60,19 @@ Create a new show configuration or open a saved one.
 
 ---
 
+## Documentation
+
+- [**`docs/README.md`**](docs/README.md) — index of everything: architecture
+  draft, feature backlog, the Companion module reference, plus a quick
+  reference and the data-flow diagram.
+
+`npm run docs:reachable` fails the build if a document under `docs/` is not
+reachable by links from an entry page. All three were orphaned until
+2026-09-04 — including `docs/README.md` itself, which was already a good index
+that nobody linked.
+
+---
+
 ## Architecture
 
 ```
