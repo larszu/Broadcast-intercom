@@ -27,9 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -45,6 +45,13 @@ jobs:
       # ein gutes Inhaltsverzeichnis war, das nur niemand verlinkte.
       - name: Dokumentation ist auffindbar
         run: npm run docs:reachable
+
+      # Fragt die action.yml jedes Pins nach ihrer Node-Version, statt sie in
+      # einem Kommentar zu behaupten. Am 2026-09-05 liefen hier BEIDE Actions
+      # auf dem abgekuendigten node20, und niemandem ist es aufgefallen -- die
+      # Warnung steht am Ende jedes Laufs, und genau deshalb liest sie keiner.
+      - name: Actions laufen auf einer unterstuetzten Node-Version
+        run: npm run actions:check
 
       - name: Kern starten
         run: |
