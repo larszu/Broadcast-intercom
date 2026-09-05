@@ -17,6 +17,7 @@ A self-hosted, browser-based production intercom system for live events and broa
 - **Companion / Stream Deck control** — REST control endpoint plus a ready-to-use [Bitfocus Companion module](companion-module/) (`companion-module/`)
 - **Audio transcription** — optional Vosk speech-to-text per channel
 - **Plugin Bridge** — optional VST/audio plugin integration via WebSocket
+- **Intercom plan import** — reads the vendor-neutral `avplan-intercom` file the AV Planner Suite exports: conferences, stations, and talk/listen kept apart. Merged by name, never deleting ([details](docs/plan-import.md))
 
 ---
 
@@ -275,6 +276,8 @@ pushes `state` / `event` messages on every change.
 | DELETE | `/api/configs/:name` | Delete a saved config |
 | GET | `/api/network/hosts` | LAN IP addresses + server port |
 | GET | `/api/fs/list?path=` | Server-side file browser (plugin paths) |
+| POST | `/api/plan/preview` | Compare an `avplan-intercom` plan against this system — changes nothing ([details](docs/plan-import.md)) |
+| POST | `/api/plan/apply` | Apply that plan: merge conferences and stations by name, never delete |
 
 **`ControlAction` values (`POST /api/control/action`):**
 `ptt_start`, `ptt_stop`, `mute_input`, `mute_output`, `set_selected_slot`, `volume_up`, `volume_down`, `direct_call_start`, `direct_call_end`, `emergency_start`, `emergency_stop`

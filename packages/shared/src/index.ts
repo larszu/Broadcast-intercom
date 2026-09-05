@@ -435,3 +435,8 @@ export type ServerMessage =
       type: "temp_channel_closed";
       payload: { tempChannelId: string };
     };
+
+// Der Plan-Import (B-41.2) liegt in einer eigenen Datei, weil er nichts
+// definiert, sondern uebersetzt: aus dem herstellerneutralen Format des
+// AV-Planners in die Typen darueber.
+export * from "./planImport";

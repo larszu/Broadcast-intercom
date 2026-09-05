@@ -955,3 +955,27 @@ input:focus, select:focus, textarea:focus {
 }
 .dmAddFormTitle { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
 .dmAddError { color: #e74c3c; font-size: 12px; margin: 0; }
+
+/* ── Intercom-Plan-Import (B-41.2) ─────────────────────────────────────────
+   Der Abgleich ist der eigentliche Inhalt der Ansicht, nicht der Knopf: was
+   der Import taete, muss lesbar sein, bevor er es tut. Zwei Spalten
+   (Konferenzen | Sprechstellen), darin je Gruppe eine kurze Liste mit Anzahl. */
+.planIntro { color: var(--text2); font-size: 13px; line-height: 1.5; margin-bottom: 14px; max-width: 68ch; }
+.planFileName { color: var(--text3); font-size: 12px; }
+.planError { color: var(--danger, #e63946); font-size: 13px; margin-top: 10px; }
+.planOk { color: var(--ok, #06d6a0); font-size: 13px; margin-top: 10px; }
+.planDiff { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 14px; }
+.planDiffHead { font-size: 14px; font-weight: 600; color: var(--text); }
+.planDerivedFrom { color: var(--text3); font-size: 12px; font-style: italic; margin: 6px 0 12px; max-width: 72ch; line-height: 1.45; }
+.planDiffCols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.planDiffGroup { margin-bottom: 14px; }
+.planDiffGroup h4 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text2); margin-bottom: 6px; }
+.planDiffCount { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 8px; background: var(--surface2, #22262f); color: var(--text3); font-size: 11px; font-weight: 600; }
+.planDiffHint { color: var(--text3); font-size: 12px; margin-bottom: 6px; line-height: 1.4; }
+.planDiffList { list-style: none; margin: 0; padding: 0; }
+.planDiffList li { font-size: 13px; color: var(--text); padding: 2px 0; }
+.planDiffWarn h4 { color: var(--warn, #f4a261); }
+
+@media (max-width: 900px) {
+  .planDiffCols { grid-template-columns: 1fr; }
+}
