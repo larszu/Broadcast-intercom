@@ -35,7 +35,10 @@ import type {
 	UserRole,
 } from "@broadcast/shared";
 import {
+	applyIntercomPlan,
 	defaultCallBehavior,
+	diffIntercomPlan,
+	parseIntercomPlan,
 	SYSTEM_CHANNEL_ANNOUNCEMENT,
 	SYSTEM_CHANNEL_EMERGENCY,
 	SYSTEM_CHANNEL_PROGRAM,
@@ -1587,6 +1590,58 @@ app.post("/api/devices", (req, res) => {
 	assignDeviceToUser(id, device.userId);
 	emitEvent("register", `Device ${device.label} added manually`);
 	res.json({ ok: true, state });
+});
+
+// ─── Intercom-Plan aus dem AV-Planner (B-41.2) ────────────────────────────────
+//
+// Zwei Wege, und der erste ist nicht optional: `preview` sagt, was der Import
+// taete, `apply` tut es. Ein Import schreibt Sprechberechtigungen in eine
+// Anlage, an der gleich jemand arbeitet -- wer ihn ausloest, soll vorher lesen
+// koennen, was sich bewegt. Dieselbe Aufteilung wie beim Tally-Weg der Suite,
+// und aus demselben Grund.
+//
+// Der Koerper ist die Datei selbst (`plan`), als Objekt oder als Text. Beides,
+// weil der Weg von Hand (Datei einlesen, Text schicken) und der Weg aus einem
+// anderen Programm (JSON weiterreichen) sonst zwei Endpunkte braeuchten.
+
+function leseGeplantenPlan(body: unknown): ReturnType<typeof parseIntercomPlan> {
+	const roh = (body as Record<string, unknown> | null)?.plan;
+	if (typeof roh === "string") return parseIntercomPlan(roh);
+	if (roh && typeof roh === "object") return parseIntercomPlan(JSON.stringify(roh));
+	return null;
+}
+
+const PLAN_FEHLER =
+	"Kein gueltiger Intercom-Plan. Erwartet wird eine Datei im Format " +
+	"'avplan-intercom' (Export aus dem Cable-Planner).";
+
+app.post("/api/plan/preview", (req, res) => {
+	const plan = leseGeplantenPlan(req.body);
+	if (!plan) {
+		res.status(400).json({ ok: false, error: PLAN_FEHLER });
+		return;
+	}
+	res.json({ ok: true, diff: diffIntercomPlan(state, plan) });
+});
+
+app.post("/api/plan/apply", async (req, res) => {
+	const plan = leseGeplantenPlan(req.body);
+	if (!plan) {
+		res.status(400).json({ ok: false, error: PLAN_FEHLER });
+		return;
+	}
+	const ergebnis = applyIntercomPlan(state, plan, now());
+	state = ergebnis.state;
+	await saveConfig();
+	emitEvent(
+		"config",
+		`Intercom-Plan "${plan.systemName || "ohne Namen"}" uebernommen: ` +
+			`${ergebnis.diff.channels.added.length} Kanaele neu, ` +
+			`${ergebnis.diff.users.added.length} Sprechstellen neu, ` +
+			`${ergebnis.diff.users.updated.length} geaendert`,
+	);
+	broadcastState();
+	res.json({ ok: true, diff: ergebnis.diff, state });
 });
 
 app.patch("/api/devices/:id", (req, res) => {

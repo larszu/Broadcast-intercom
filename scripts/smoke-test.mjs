@@ -151,6 +151,81 @@ async function run() {
 	check("WS direct_call opens temp channel", Boolean(await nextMsg(ws, (m) => m.type === "temp_channel_opened" || (m.type === "state" && m.payload?.temporaryChannels?.length > 0), 4000).catch(() => null)));
 	ws.close();
 
+	// ── Intercom-Plan aus dem AV-Planner (B-41.2) ──
+	// Der Plan bringt eine Konferenz mit, die es schon gibt ("DIR", hier klein
+	// und mit Leerzeichen geschrieben), eine neue, und eine Sprechstelle, die
+	// auf der einen spricht und die andere nur hoert. Genau daran haengt der
+	// Nutzen: zusammenfuehren statt verdoppeln, und talk/listen getrennt.
+	const plan = {
+		format: "avplan-intercom",
+		version: 1,
+		systemName: "Smoke-Anlage",
+		exportedAt: "2026-09-05T12:00:00.000Z",
+		channels: [
+			{ id: "ch-1", name: " dir " },
+			{ id: "ch-2", name: "SMOKE-PGM" },
+		],
+		stations: [
+			{
+				id: "st-1",
+				name: "Smoke Regie",
+				memberships: [
+					{ channelId: "ch-1", talk: true, listen: true },
+					{ channelId: "ch-2", talk: false, listen: true },
+					// Verweis auf eine Konferenz, die die Datei nicht definiert.
+					{ channelId: "ch-99", talk: true, listen: true },
+				],
+			},
+		],
+		derivedFrom: "Green-GO-Konfiguration.",
+	};
+
+	const bad = await api("POST", "/api/plan/preview", { plan: { format: "etwas-anderes" } });
+	check("plan preview rejects a foreign format → 400", bad.status === 400);
+
+	const vorher = (await api("GET", "/api/state")).json;
+	const pv = await api("POST", "/api/plan/preview", { plan });
+	check("plan preview → 200", pv.status === 200);
+	check("preview merges the existing channel by name", pv.json?.diff?.channels?.unchanged?.some((c) => /dir/i.test(c.name)));
+	check("preview lists the new channel", pv.json?.diff?.channels?.added?.some((c) => c.name === "SMOKE-PGM"));
+	check("preview lists the new station", pv.json?.diff?.users?.added?.some((u) => u.name === "Smoke Regie"));
+	check("preview keeps what the plan does not name", (pv.json?.diff?.channels?.keptOutsidePlan?.length ?? 0) > 0);
+	check("preview reports the dangling membership", pv.json?.diff?.danglingMemberships?.length === 1);
+	check("preview passes derivedFrom through", /Green-GO/.test(pv.json?.diff?.derivedFrom || ""));
+	// Der Abgleich ist eine Vorschau. Aendert er etwas, ist er keine.
+	const nachher = (await api("GET", "/api/state")).json;
+	check("preview changes nothing", JSON.stringify(vorher?.channels) === JSON.stringify(nachher?.channels));
+
+	const ap = await api("POST", "/api/plan/apply", { plan });
+	check("plan apply → 200", ap.status === 200);
+	const nachApply = (await api("GET", "/api/state")).json;
+	const pgm = Object.values(nachApply?.channels ?? {}).find((c) => c.name === "SMOKE-PGM");
+	const dir = Object.values(nachApply?.channels ?? {}).find((c) => /^dir$/i.test(c.name));
+	const regie = Object.values(nachApply?.users ?? {}).find((u) => u.name === "Smoke Regie");
+	check("apply created the new channel", Boolean(pgm));
+	check("apply did not duplicate the existing channel", Object.values(nachApply?.channels ?? {}).filter((c) => /^dir$/i.test(c.name)).length === 1);
+	check("apply created the station", Boolean(regie));
+	check("station talks only where the plan says so", regie && dir && pgm
+		&& regie.permissions.talkChannelIds.includes(dir.id)
+		&& !regie.permissions.talkChannelIds.includes(pgm.id));
+	check("station listens on both", regie && dir && pgm
+		&& regie.permissions.listenChannelIds.includes(dir.id)
+		&& regie.permissions.listenChannelIds.includes(pgm.id));
+	check("apply kept the system channels", Boolean(nachApply?.channels?.__sys_emergency__));
+	check("apply kept the devices it does not know about", Boolean(nachApply?.devices?.["bp-smoke-1"]));
+
+	// Zweiter Lauf derselben Datei: nichts darf sich verdoppeln. Das ist der
+	// Fall, der bei einem Zusammenfuehren ueber die Datei-Id kaputtginge.
+	const zweite = await api("POST", "/api/plan/apply", { plan });
+	check("second apply → 200", zweite.status === 200);
+	const nachZwei = (await api("GET", "/api/state")).json;
+	check("second apply adds nothing", Object.keys(nachZwei?.channels ?? {}).length === Object.keys(nachApply?.channels ?? {}).length
+		&& Object.keys(nachZwei?.users ?? {}).length === Object.keys(nachApply?.users ?? {}).length);
+	check("second apply keeps the same channel colour", pgm && Object.values(nachZwei?.channels ?? {}).find((c) => c.name === "SMOKE-PGM")?.color === pgm.color);
+
+	if (pgm) await api("DELETE", `/api/channels/${pgm.id}`);
+	if (regie) await api("DELETE", `/api/users/${regie.id}`);
+
 	// ── Cleanup ──
 	check("DELETE device → 200", (await api("DELETE", "/api/devices/bp-smoke-1")).status === 200);
 	check("DELETE device ws → 200", (await api("DELETE", "/api/devices/ws-smoke-1")).status === 200);
