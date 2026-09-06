@@ -53,6 +53,14 @@ jobs:
       - name: Actions laufen auf einer unterstuetzten Node-Version
         run: npm run actions:check
 
+      # Bedarf 3 — die Companion-Tasten kommen aus dem Plan. Der
+      # Integrationslauf des Moduls braucht einen Kern UND eine
+      # Companion-Installation; die Ableitung braucht beides nicht. Ohne
+      # diesen Schritt fande die einzige Pruefung der Tastenableitung nie
+      # statt, und eine Pruefung, die nicht laeuft, ist keine.
+      - name: Companion-Tasten kommen aus dem Plan
+        run: npm run presets:check
+
       - name: Kern starten
         run: |
           MOCK_DEVICES=1 node apps/server/dist/index.js > /tmp/intercom.log 2>&1 &

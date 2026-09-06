@@ -16,7 +16,8 @@
     "build": "npm run build -w @broadcast/shared && npm run build -w @broadcast/server && npm run build -w @broadcast/web",
     "test:smoke": "node scripts/smoke-test.mjs",
     "docs:reachable": "node scripts/docs-reachable.mjs",
-    "actions:check": "node scripts/actions-node-runtime.mjs"
+    "actions:check": "node scripts/actions-node-runtime.mjs",
+    "presets:check": "node scripts/presets-check.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.2.0",

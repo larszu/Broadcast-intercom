@@ -5,7 +5,7 @@
   "main": "src/index.js",
   "description": "Bitfocus Companion module for the Broadcast Intercom production intercom system",
   "scripts": {
-    "check": "node --check src/index.js && node --check src/api.js && node --check src/actions.js && node --check src/feedbacks.js && node --check src/variables.js && node --check src/presets.js && node --check src/config.js && node --check src/upgrades.js",
+    "check": "node --check src/index.js && node --check src/api.js && node --check src/actions.js && node --check src/feedbacks.js && node --check src/variables.js && node --check src/presets.js && node --check src/presetPlan.js && node --check src/config.js && node --check src/upgrades.js",
     "build:manifest": "companion-module-build --dev"
   },
   "repository": {
