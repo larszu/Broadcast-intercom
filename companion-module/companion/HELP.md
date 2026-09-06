@@ -54,5 +54,27 @@ Per device (id sanitised to letters/numbers/underscore): `device_<id>_label`,
 
 Ready-to-drop buttons under *Push-to-talk*, *Audio* and *System*: PTT (hold),
 PTT (toggle), Mute microphone, Volume up/down, Emergency toggle, and a core
-connection-status indicator. After dropping a preset, pick the target device in
-the button's action/feedback options.
+connection-status indicator. After dropping one of these, pick the target device
+in the button's action/feedback options.
+
+### Buttons derived from the loaded plan
+
+Two further categories appear as soon as the module reaches a core that has a
+plan loaded, and they need **no** picking afterwards:
+
+- **Plan · Sprechstellen** — one *PTT* and one *Mic mute* button per beltpack,
+  already bound to that beltpack, labelled with its real name. PTT is a hold
+  button, not a toggle: a latched talk button that nobody released is an open
+  microphone in the control room.
+- **Plan · Kanäle** — one *talk on channel* button per beltpack **that actually
+  carries the channel**. A beltpack that does not carry it gets no button
+  instead of a guessed one, because a guessed talk button opens the wrong
+  microphone on the wrong channel.
+
+The list is rebuilt whenever the core's device/user/channel set changes, so a
+new show configuration brings its own buttons with it — nothing is copied and
+hand-tweaked per show variant.
+
+If a core carries more beltpacks or channels than the list holds (64 per kind),
+the module writes a warning to its log naming how many were left out. It never
+truncates silently.

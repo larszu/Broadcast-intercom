@@ -17,7 +17,7 @@ class BroadcastIntercomInstance extends InstanceBase {
 
 		this.setActionDefinitions(getActions(this))
 		this.setFeedbackDefinitions(getFeedbacks(this))
-		this.setPresetDefinitions(getPresets())
+		this.setPresetDefinitions(getPresets(this))
 		this.setVariableDefinitions(getVariableDefinitions(this))
 
 		this.connection.start()
@@ -55,6 +55,14 @@ class BroadcastIntercomInstance extends InstanceBase {
 			this.setActionDefinitions(getActions(this))
 			this.setFeedbackDefinitions(getFeedbacks(this))
 			this.setVariableDefinitions(getVariableDefinitions(this))
+			// Bedarf 3: die Tasten gehoeren dazu. Bis hierher standen sie NICHT
+			// in dieser Liste — sie wurden einmal in `init()` gesetzt, vor der
+			// ersten Verbindung, und konnten deshalb nie etwas ueber den
+			// geladenen Plan wissen. Aktionen, Feedbacks und Variablen wurden
+			// hier seit jeher nachgezogen; die Tasten waren die Ausnahme, und
+			// niemandem ist es aufgefallen, weil eine Vorlage mit `device: ''`
+			// auch ohne Plan „richtig" aussieht.
+			this.setPresetDefinitions(getPresets(this))
 		}
 
 		this.setVariableValues(getVariableValues(this))
