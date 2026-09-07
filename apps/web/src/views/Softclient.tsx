@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CoreState } from "@broadcast/shared";
 import { useAudioPlayback } from "../hooks/useAudioPlayback";
 import type { AudioChunkPayload } from "../hooks/useIntercomStore";
+import { downsampleToInt16, int16ToBase64, mikrofonPegel } from "../lib/audio";
 
 type PttMode = "momentary" | "latching";
 const TRANSCRIPTION_SAMPLE_RATE = 16000;
@@ -36,52 +37,6 @@ interface Props {
   sendWs: (msg: unknown) => void;
   api: <T = unknown>(method: "GET" | "POST" | "PATCH" | "DELETE", url: string, body?: unknown) => Promise<T>;
   setAudioChunkHandler: (fn: ((p: AudioChunkPayload) => void) | null) => void;
-}
-
-function downsampleToInt16(input: Float32Array, inputRate: number, outputRate: number): Int16Array {
-  if (inputRate === outputRate) {
-    const direct = new Int16Array(input.length);
-    for (let i = 0; i < input.length; i += 1) {
-      const s = Math.max(-1, Math.min(1, input[i]));
-      direct[i] = s < 0 ? Math.round(s * 0x8000) : Math.round(s * 0x7fff);
-    }
-    return direct;
-  }
-
-  const ratio = inputRate / outputRate;
-  const outLength = Math.round(input.length / ratio);
-  const result = new Int16Array(outLength);
-  let outIdx = 0;
-  let inIdx = 0;
-
-  while (outIdx < outLength) {
-    const nextInIdx = Math.round((outIdx + 1) * ratio);
-    let total = 0;
-    let count = 0;
-
-    for (let i = inIdx; i < Math.min(nextInIdx, input.length); i += 1) {
-      total += input[i];
-      count += 1;
-    }
-
-    const sample = count > 0 ? total / count : 0;
-    const s = Math.max(-1, Math.min(1, sample));
-    result[outIdx] = s < 0 ? Math.round(s * 0x8000) : Math.round(s * 0x7fff);
-
-    outIdx += 1;
-    inIdx = nextInIdx;
-  }
-
-  return result;
-}
-
-function int16ToBase64(pcm: Int16Array): string {
-  const bytes = new Uint8Array(pcm.buffer);
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += 1) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
 }
 
 export function Softclient({ state, sendWs, api, setAudioChunkHandler }: Props) {
@@ -265,10 +220,13 @@ export function Softclient({ state, sendWs, api, setAudioChunkHandler }: Props) 
       };
 
       const tick = () => {
-        const data = new Uint8Array(analyser.frequencyBinCount);
-        analyser.getByteFrequencyData(data);
-        const avg = data.reduce((a, b) => a + b, 0) / data.length;
-        const pct = Math.min(100, Math.round((avg / 255) * 100));
+        // Zeitbereich, nicht Spektrum: hier stand ein Mittel ueber alle
+        // FFT-Bins, und das ist bei Sprache systematisch zu niedrig. Der
+        // PhoneClient rechnete schon immer richtig; jetzt tun es beide durch
+        // dieselbe Funktion. Siehe `lib/audio.ts`.
+        const data = new Uint8Array(analyser.fftSize);
+        analyser.getByteTimeDomainData(data);
+        const pct = mikrofonPegel(data);
         setMicLevel(pct);
 
         // VOX logic

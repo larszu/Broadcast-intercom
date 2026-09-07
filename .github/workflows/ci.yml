@@ -80,6 +80,13 @@ jobs:
       - name: Konfiguration wird atomar geschrieben
         run: npm run config:check
 
+      # Softclient und PhoneClient sind zwei Ansichten derselben App am
+      # selben Kern und rechneten den Mikrofon-Pegel mit ZWEI verschiedenen
+      # Formeln, beide als „%" auf demselben Balken. Der Softclient
+      # vergleicht seine VOX-Schwelle gegen diese Zahl.
+      - name: Mikrofon-Pegel und PCM kommen aus einer Rechnung
+        run: npm run audio:check
+
       - name: Kern starten
         run: |
           MOCK_DEVICES=1 node apps/server/dist/index.js > /tmp/intercom.log 2>&1 &

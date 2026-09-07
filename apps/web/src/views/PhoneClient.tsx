@@ -4,53 +4,9 @@ import { useLang } from "../i18n";
 import { PttSlider } from "./PttSlider";
 import { useAudioPlayback } from "../hooks/useAudioPlayback";
 import type { AudioChunkPayload } from "../hooks/useIntercomStore";
+import { downsampleToInt16, int16ToBase64, mikrofonPegel } from "../lib/audio";
 
 const TRANSCRIPTION_SAMPLE_RATE = 16000;
-
-function downsampleToInt16(input: Float32Array, inputRate: number, outputRate: number): Int16Array {
-  if (inputRate === outputRate) {
-    const direct = new Int16Array(input.length);
-    for (let i = 0; i < input.length; i += 1) {
-      const sample = Math.max(-1, Math.min(1, input[i]));
-      direct[i] = sample < 0 ? Math.round(sample * 0x8000) : Math.round(sample * 0x7fff);
-    }
-    return direct;
-  }
-
-  const ratio = inputRate / outputRate;
-  const outLength = Math.round(input.length / ratio);
-  const result = new Int16Array(outLength);
-  let outIdx = 0;
-  let inIdx = 0;
-
-  while (outIdx < outLength) {
-    const nextInIdx = Math.round((outIdx + 1) * ratio);
-    let total = 0;
-    let count = 0;
-
-    for (let i = inIdx; i < Math.min(nextInIdx, input.length); i += 1) {
-      total += input[i];
-      count += 1;
-    }
-
-    const sample = count > 0 ? total / count : 0;
-    const clamped = Math.max(-1, Math.min(1, sample));
-    result[outIdx] = clamped < 0 ? Math.round(clamped * 0x8000) : Math.round(clamped * 0x7fff);
-    outIdx += 1;
-    inIdx = nextInIdx;
-  }
-
-  return result;
-}
-
-function int16ToBase64(pcm: Int16Array): string {
-  const bytes = new Uint8Array(pcm.buffer);
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += 1) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
 
 function describeMicError(error: unknown): string {
   if (error && typeof error === "object" && "name" in error) {
@@ -345,16 +301,11 @@ export function PhoneClient({ state, sendWs, connected, setAudioChunkHandler }: 
       };
 
       const tick = () => {
-        // Time-domain RMS for accurate level metering
+        // Zeitbereichs-RMS, jetzt aus `lib/audio.ts` — dieselbe Rechnung wie
+        // im Softclient, damit derselbe Balken auch dasselbe bedeutet.
         const data = new Uint8Array(analyser.fftSize);
         analyser.getByteTimeDomainData(data);
-        let sumSq = 0;
-        for (let i = 0; i < data.length; i++) {
-          const v = (data[i] - 128) / 128;
-          sumSq += v * v;
-        }
-        const rms = Math.sqrt(sumSq / data.length);
-        setMicLevel(Math.min(100, Math.round(rms * 400)));
+        setMicLevel(mikrofonPegel(data));
         animRef.current = requestAnimationFrame(tick);
       };
       tick();
