@@ -20,6 +20,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Von Hand startbar. Gebraucht, als ein Pull Request geoeffnet wurde,
+  # nachdem der Branch schon gepusht war: dann feuert weder `push`
+  # (falscher Branch) noch verlaesslich `pull_request`, und die CI-Stufe
+  # fehlte ganz — ein PR ohne Lauf sieht aus wie einer, auf den man noch
+  # wartet.
+  workflow_dispatch:
 
 jobs:
   verify:
