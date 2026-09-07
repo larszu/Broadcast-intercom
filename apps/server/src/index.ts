@@ -10,6 +10,7 @@ import { networkInterfaces } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
+import { atomicWrite, bakPath, readWithBackup } from "./configStore.js";
 import type {
 	AudioSettings,
 	BeltpackDevice,
@@ -471,15 +472,23 @@ async function saveConfig(configName?: string): Promise<void> {
 	const target = sanitizeConfigName(configName || state.activeConfig.name);
 	state.activeConfig = { name: target, updatedAt: now() };
 	await ensureConfigDir();
-	await fs.writeFile(configFilePath(target), JSON.stringify(state, null, 2), "utf-8");
+	// ATOMAR, nicht direkt: ein Absturz waehrend des Schreibens hinterliess
+	// vorher eine halbe Datei, und der Kern startete danach nicht mehr.
+	// Siehe `configStore.ts` fuer den ganzen Befund.
+	await atomicWrite(configFilePath(target), JSON.stringify(state, null, 2));
 }
 
 async function loadConfig(configName: string): Promise<CoreState> {
 	const target = sanitizeConfigName(configName);
-	const raw = await fs.readFile(configFilePath(target), "utf-8");
-	const parsed = JSON.parse(raw) as Partial<CoreState>;
-	const stat = await fs.stat(configFilePath(target));
-	return hydrateState(parsed, target, stat.mtimeMs);
+	const datei = configFilePath(target);
+	const ergebnis = await readWithBackup(datei, (raw) => JSON.parse(raw) as Partial<CoreState>);
+	if (ergebnis.warnung) {
+		emitEvent("system", ergebnis.warnung);
+	}
+	// Der Zeitstempel kommt von der Datei, die WIRKLICH gelesen wurde — sonst
+	// traegt der Stand das Datum einer Datei, aus der er nicht stammt.
+	const stat = await fs.stat(ergebnis.source === "haupt" ? datei : bakPath(datei));
+	return hydrateState(ergebnis.value, target, stat.mtimeMs);
 }
 
 const app = express();
@@ -1847,7 +1856,26 @@ async function initializeState(): Promise<void> {
 	await ensureConfigDir();
 	const items = await listConfigs();
 	if (items.length > 0) {
-		state = await loadConfig(items[0].name);
+		try {
+			state = await loadConfig(items[0].name);
+		} catch (error) {
+			// Weder Hauptdatei noch Sicherung lesbar. Der Kern startet
+			// trotzdem: ein Intercom, das wegen einer kaputten Datei gar
+			// nicht hochkommt, ist im Aufbau schlimmer als eines mit leerer
+			// Konfiguration.
+			//
+			// Aber er SPEICHERT NICHT. Die kaputte Datei bleibt liegen, damit
+			// sie jemand von Hand retten kann; ein automatisches Ueberschreiben
+			// waere die zweite Haelfte desselben Datenverlusts. Geschrieben
+			// wird erst wieder, wenn ein Mensch etwas aendert.
+			state = createInitialState(items[0].name);
+			emitEvent(
+				"system",
+				`Konfiguration "${items[0].name}" ist unlesbar (${describeError(error)}). ` +
+					`Der Kern startet mit einer leeren Konfiguration; die Datei wurde NICHT ` +
+					`ueberschrieben und kann von Hand geprueft werden.`,
+			);
+		}
 	} else {
 		state = createInitialState("default");
 		await saveConfig("default");
