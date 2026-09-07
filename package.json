@@ -18,6 +18,7 @@
     "docs:reachable": "node scripts/docs-reachable.mjs",
     "actions:check": "node scripts/actions-node-runtime.mjs",
     "presets:check": "node scripts/presets-check.mjs",
+    "config:check": "node scripts/config-atomic-check.mjs",
     "brand:check": "node scripts/brand-tokens-check.mjs"
   },
   "devDependencies": {
