@@ -20,6 +20,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Von Hand startbar. Gebraucht, als ein Pull Request geoeffnet wurde,
+  # nachdem der Branch schon gepusht war: dann feuert weder `push`
+  # (falscher Branch) noch verlaesslich `pull_request`, und die CI-Stufe
+  # fehlte ganz — ein PR ohne Lauf sieht aus wie einer, auf den man noch
+  # wartet.
+  workflow_dispatch:
 
 jobs:
   verify:
@@ -45,6 +51,12 @@ jobs:
       # ein gutes Inhaltsverzeichnis war, das nur niemand verlinkte.
       - name: Dokumentation ist auffindbar
         run: npm run docs:reachable
+
+      # Nutzer-Rueckmeldung 2026-09-07: "die ui ist nicht konsistent. lege
+      # globale ui regeln fest die fuer alle repos gelten." Die Regeln stehen
+      # in ADR-007 der av-planner-suite; dieser Check haelt sie hier.
+      - name: Oberflaechen-Regeln (ADR-007)
+        run: npm run brand:check
 
       # Fragt die action.yml jedes Pins nach ihrer Node-Version, statt sie in
       # einem Kommentar zu behaupten. Am 2026-09-05 liefen hier BEIDE Actions

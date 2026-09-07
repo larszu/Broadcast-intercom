@@ -17,7 +17,8 @@
     "test:smoke": "node scripts/smoke-test.mjs",
     "docs:reachable": "node scripts/docs-reachable.mjs",
     "actions:check": "node scripts/actions-node-runtime.mjs",
-    "presets:check": "node scripts/presets-check.mjs"
+    "presets:check": "node scripts/presets-check.mjs",
+    "brand:check": "node scripts/brand-tokens-check.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.2.0",
