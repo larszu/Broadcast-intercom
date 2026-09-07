@@ -46,6 +46,12 @@ jobs:
       - name: Dokumentation ist auffindbar
         run: npm run docs:reachable
 
+      # Nutzer-Rueckmeldung 2026-09-07: "die ui ist nicht konsistent. lege
+      # globale ui regeln fest die fuer alle repos gelten." Die Regeln stehen
+      # in ADR-007 der av-planner-suite; dieser Check haelt sie hier.
+      - name: Oberflaechen-Regeln (ADR-007)
+        run: npm run brand:check
+
       # Fragt die action.yml jedes Pins nach ihrer Node-Version, statt sie in
       # einem Kommentar zu behaupten. Am 2026-09-05 liefen hier BEIDE Actions
       # auf dem abgekuendigten node20, und niemandem ist es aufgefallen -- die
