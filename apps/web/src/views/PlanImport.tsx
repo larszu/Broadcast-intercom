@@ -158,6 +158,23 @@ export function PlanImport({ api }: Props) {
             </div>
           </div>
 
+          {diff.skipped.length > 0 && (
+            <div className="planDiffGroup planDiffWarn">
+              <h4>
+                {t.planSkipped} <span className="planDiffCount">{diff.skipped.length}</span>
+              </h4>
+              <p className="planDiffHint">{t.planSkippedHint}</p>
+              <ul className="planDiffList">
+                {diff.skipped.map((sk, i) => (
+                  <li key={`${sk.where}-${sk.index}-${i}`}>
+                    {sk.where} #{sk.index}
+                    {sk.context ? ` (${sk.context})` : ""} — {sk.reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {diff.danglingMemberships.length > 0 && (
             <div className="planDiffGroup planDiffWarn">
               <h4>
