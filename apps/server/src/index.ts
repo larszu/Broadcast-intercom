@@ -39,7 +39,7 @@ import {
 	applyIntercomPlan,
 	defaultCallBehavior,
 	diffIntercomPlan,
-	parseIntercomPlan,
+	readIntercomPlan,
 	SYSTEM_CHANNEL_ANNOUNCEMENT,
 	SYSTEM_CHANNEL_EMERGENCY,
 	SYSTEM_CHANNEL_PROGRAM,
@@ -1613,32 +1613,37 @@ app.post("/api/devices", (req, res) => {
 // weil der Weg von Hand (Datei einlesen, Text schicken) und der Weg aus einem
 // anderen Programm (JSON weiterreichen) sonst zwei Endpunkte braeuchten.
 
-function leseGeplantenPlan(body: unknown): ReturnType<typeof parseIntercomPlan> {
+function leseGeplantenPlan(body: unknown): ReturnType<typeof readIntercomPlan> {
 	const roh = (body as Record<string, unknown> | null)?.plan;
-	if (typeof roh === "string") return parseIntercomPlan(roh);
-	if (roh && typeof roh === "object") return parseIntercomPlan(JSON.stringify(roh));
-	return null;
+	if (typeof roh === "string") return readIntercomPlan(roh);
+	if (roh && typeof roh === "object") return readIntercomPlan(JSON.stringify(roh));
+	return { ok: false, error: PLAN_FEHLER };
 }
 
 const PLAN_FEHLER =
 	"Kein gueltiger Intercom-Plan. Erwartet wird eine Datei im Format " +
 	"'avplan-intercom' (Export aus dem Cable-Planner).";
 
+// Der GRUND geht mit hinaus, statt in einem Satz fuer alles zu verschwinden.
+// „Kein gueltiger Intercom-Plan" fuer eine Datei, die nur eine Version zu neu
+// ist, schickt jemanden auf die falsche Suche.
 app.post("/api/plan/preview", (req, res) => {
-	const plan = leseGeplantenPlan(req.body);
-	if (!plan) {
-		res.status(400).json({ ok: false, error: PLAN_FEHLER });
+	const gelesen = leseGeplantenPlan(req.body);
+	if (!gelesen.ok) {
+		res.status(400).json({ ok: false, error: gelesen.error });
 		return;
 	}
+	const plan = gelesen.file;
 	res.json({ ok: true, diff: diffIntercomPlan(state, plan) });
 });
 
 app.post("/api/plan/apply", async (req, res) => {
-	const plan = leseGeplantenPlan(req.body);
-	if (!plan) {
-		res.status(400).json({ ok: false, error: PLAN_FEHLER });
+	const gelesen = leseGeplantenPlan(req.body);
+	if (!gelesen.ok) {
+		res.status(400).json({ ok: false, error: gelesen.error });
 		return;
 	}
+	const plan = gelesen.file;
 	const ergebnis = applyIntercomPlan(state, plan, now());
 	state = ergebnis.state;
 	await saveConfig();

@@ -499,6 +499,36 @@ export type ServerMessage =
 
 export const INTERCOM_PLAN_FORMAT = "avplan-intercom";
 
+/**
+ * Die hoechste Plan-Version, die dieser Kern versteht.
+ *
+ * BEFUND (Defektformen-Sweep, Form `vertrag-nur-feldnamen`, gemessen
+ * 2026-09-07). `parseIntercomPlan` pruefte `typeof o.version !== "number"` —
+ * also den NAMEN und den TYP des Feldes — und verglich die Zahl danach mit
+ * nichts. Ein Plan mit `version: 7`, geschrieben von einem Exporteur, den es
+ * heute noch nicht gibt, wurde mit v1-Bedeutung gelesen: jedes Feld, dessen
+ * Bedeutung sich zwischen den Versionen aendert, wird dann still falsch
+ * verstanden. Und was hier falsch verstanden wird, sind SPRECHBERECHTIGUNGEN
+ * an einer Anlage, an der gleich jemand arbeitet.
+ *
+ * Alle Schwester-Formate dieser Familie lehnen eine zu neue Version ab
+ * (`camera-list`, `.avplan`, `venue-exchange`, `avplan-inventory`). Dieses
+ * eine nicht.
+ */
+export const INTERCOM_PLAN_VERSION = 1;
+
+/** Ein Eintrag, den die Datei enthielt und der Kern nicht uebernehmen konnte. */
+export interface PlanSkipped {
+  /** Wo er stand. */
+  where: "channel" | "station" | "membership";
+  /** Position in der Datei, 1-basiert — damit man ihn wiederfindet. */
+  index: number;
+  /** Wozu er gehoerte, sofern lesbar (Sprechstellen-Name bei Zugehoerigkeiten). */
+  context?: string;
+  /** Warum er nicht uebernommen wurde. */
+  reason: string;
+}
+
 /** Eine Konferenz aus dem Plan ("PGM", "CAM", "Ton"). */
 export interface PlanChannel {
   id: string;
@@ -533,6 +563,16 @@ export interface IntercomPlanFile {
   stations: PlanStation[];
   vendor?: Record<string, unknown>;
   derivedFrom?: string;
+  /**
+   * Was in der Datei stand und nicht uebernommen wurde.
+   *
+   * Vorher fielen solche Eintraege per `continue` still aus der Liste. Eine
+   * Datei, deren Sprechstellen alle eine unlesbare Id haben, ergab dann eine
+   * leere Liste, der Abgleich sagte „nichts zu tun", und niemand erfuhr,
+   * dass die Haelfte der Datei weggeworfen wurde. Der Abgleich ist genau
+   * dafuer da, zu zeigen, was passiert.
+   */
+  skipped: PlanSkipped[];
 }
 
 /**
@@ -568,43 +608,111 @@ const PALETTE = [
   "#8338ec", "#3a86ff", "#fb5607", "#06d6a0",
 ];
 
+/**
+ * Was beim Lesen einer Plan-Datei herauskommt.
+ *
+ * Ein Ergebnis-Typ und nicht `IntercomPlanFile | null`: der Grund, warum eine
+ * Datei nicht angenommen wird, ist fuer den Nutzer die eigentliche Auskunft.
+ * „Kein gueltiger Intercom-Plan" fuer eine Datei, die nur eine Version zu neu
+ * ist, schickt jemanden auf die falsche Suche.
+ */
+export type IntercomPlanRead =
+  | { ok: true; file: IntercomPlanFile }
+  | { ok: false; error: string };
+
 /** Ein gelesener Wert, der ein Intercom-Plan sein soll. */
-export function parseIntercomPlan(text: string): IntercomPlanFile | null {
+export function readIntercomPlan(text: string): IntercomPlanRead {
   let roh: unknown;
   try {
     roh = JSON.parse(text);
   } catch {
-    return null;
+    return { ok: false, error: "Die Datei ist kein JSON." };
   }
-  if (!roh || typeof roh !== "object") return null;
+  if (!roh || typeof roh !== "object" || Array.isArray(roh)) {
+    return { ok: false, error: "Die Datei enthaelt kein Objekt." };
+  }
   const o = roh as Record<string, unknown>;
-  if (o.format !== INTERCOM_PLAN_FORMAT) return null;
-  if (typeof o.version !== "number") return null;
-  if (!Array.isArray(o.channels) || !Array.isArray(o.stations)) return null;
+  if (o.format !== INTERCOM_PLAN_FORMAT) {
+    return {
+      ok: false,
+      error: `Kein Intercom-Plan: erwartet wird format "${INTERCOM_PLAN_FORMAT}".`,
+    };
+  }
+  if (typeof o.version !== "number" || !Number.isInteger(o.version) || o.version < 1) {
+    return { ok: false, error: "Der Plan nennt keine gueltige Version." };
+  }
+  // Der eigentliche Befund: hier stand nichts. Eine zu neue Datei wurde mit
+  // v1-Bedeutung gelesen — und was hier falsch verstanden wird, sind
+  // Sprechberechtigungen.
+  if (o.version > INTERCOM_PLAN_VERSION) {
+    return {
+      ok: false,
+      error:
+        `Der Plan ist Version ${o.version}; dieser Kern versteht bis ` +
+        `Version ${INTERCOM_PLAN_VERSION}. Ein neuerer Plan koennte Felder ` +
+        `anders meinen, als er hier gelesen wuerde.`,
+    };
+  }
+  if (!Array.isArray(o.channels) || !Array.isArray(o.stations)) {
+    return { ok: false, error: "Der Plan hat keine Listen fuer Kanaele und Sprechstellen." };
+  }
+
+  const skipped: PlanSkipped[] = [];
+  const uebersprungen = (where: PlanSkipped["where"], index: number, reason: string, context?: string) =>
+    skipped.push({ where, index: index + 1, reason, ...(context ? { context } : {}) });
 
   const channels: PlanChannel[] = [];
-  for (const c of o.channels as unknown[]) {
-    if (!c || typeof c !== "object") continue;
+  (o.channels as unknown[]).forEach((c, i) => {
+    if (!c || typeof c !== "object") {
+      uebersprungen("channel", i, "kein Objekt");
+      return;
+    }
     const x = c as Record<string, unknown>;
-    if (typeof x.id !== "string" || typeof x.name !== "string" || !x.name.trim()) continue;
+    if (typeof x.id !== "string" || !x.id.trim()) {
+      uebersprungen("channel", i, "ohne Kennung");
+      return;
+    }
+    if (typeof x.name !== "string" || !x.name.trim()) {
+      uebersprungen("channel", i, "ohne Namen", x.id);
+      return;
+    }
     channels.push({
       id: x.id,
       name: x.name.trim(),
       ...(typeof x.purpose === "string" ? { purpose: x.purpose } : {}),
     });
-  }
+  });
 
   const stations: PlanStation[] = [];
-  for (const s of o.stations as unknown[]) {
-    if (!s || typeof s !== "object") continue;
-    const x = s as Record<string, unknown>;
-    if (typeof x.id !== "string" || typeof x.name !== "string" || !x.name.trim()) continue;
+  (o.stations as unknown[]).forEach((st, i) => {
+    if (!st || typeof st !== "object") {
+      uebersprungen("station", i, "kein Objekt");
+      return;
+    }
+    const x = st as Record<string, unknown>;
+    if (typeof x.id !== "string" || !x.id.trim()) {
+      uebersprungen("station", i, "ohne Kennung");
+      return;
+    }
+    if (typeof x.name !== "string" || !x.name.trim()) {
+      uebersprungen("station", i, "ohne Namen", x.id);
+      return;
+    }
+    const name = x.name.trim();
     const memberships: PlanMembership[] = [];
-    if (Array.isArray(x.memberships)) {
-      for (const m of x.memberships as unknown[]) {
-        if (!m || typeof m !== "object") continue;
+    if (x.memberships !== undefined && !Array.isArray(x.memberships)) {
+      uebersprungen("station", i, "memberships ist keine Liste", name);
+    } else if (Array.isArray(x.memberships)) {
+      (x.memberships as unknown[]).forEach((m, j) => {
+        if (!m || typeof m !== "object") {
+          uebersprungen("membership", j, "kein Objekt", name);
+          return;
+        }
         const y = m as Record<string, unknown>;
-        if (typeof y.channelId !== "string") continue;
+        if (typeof y.channelId !== "string" || !y.channelId.trim()) {
+          uebersprungen("membership", j, "ohne Kanal-Kennung", name);
+          return;
+        }
         // Fehlt eine der beiden Angaben, gilt sie als NICHT gesetzt. Eine
         // fehlende Sprechberechtigung zu erfinden waere der teurere Fehler:
         // wer nicht sprechen soll, soll auch nicht koennen.
@@ -613,28 +721,44 @@ export function parseIntercomPlan(text: string): IntercomPlanFile | null {
           talk: y.talk === true,
           listen: y.listen === true,
         });
-      }
+      });
     }
     stations.push({
       id: x.id,
-      name: x.name.trim(),
+      name,
       ...(typeof x.shortName === "string" ? { shortName: x.shortName } : {}),
       memberships,
       ...(typeof x.equipmentId === "string" ? { equipmentId: x.equipmentId } : {}),
     });
-  }
+  });
 
   return {
-    format: INTERCOM_PLAN_FORMAT,
-    version: o.version,
-    ...(typeof o.exportedAt === "string" ? { exportedAt: o.exportedAt } : {}),
-    systemName: typeof o.systemName === "string" ? o.systemName : "",
-    ...(typeof o.description === "string" ? { description: o.description } : {}),
-    channels,
-    stations,
-    ...(o.vendor && typeof o.vendor === "object" ? { vendor: o.vendor as Record<string, unknown> } : {}),
-    ...(typeof o.derivedFrom === "string" ? { derivedFrom: o.derivedFrom } : {}),
+    ok: true,
+    file: {
+      format: INTERCOM_PLAN_FORMAT,
+      version: o.version,
+      ...(typeof o.exportedAt === "string" ? { exportedAt: o.exportedAt } : {}),
+      systemName: typeof o.systemName === "string" ? o.systemName : "",
+      ...(typeof o.description === "string" ? { description: o.description } : {}),
+      channels,
+      stations,
+      ...(o.vendor && typeof o.vendor === "object" ? { vendor: o.vendor as Record<string, unknown> } : {}),
+      ...(typeof o.derivedFrom === "string" ? { derivedFrom: o.derivedFrom } : {}),
+      skipped,
+    },
   };
+}
+
+/**
+ * Bequeme Form fuer Aufrufer, die den Grund nicht brauchen.
+ *
+ * KEINE zweite Rechnung: sie ruft `readIntercomPlan` und wirft nur den Grund
+ * weg. Wer den Grund anzeigen will — und der Import will das —, nimmt die
+ * Form darueber.
+ */
+export function parseIntercomPlan(text: string): IntercomPlanFile | null {
+  const r = readIntercomPlan(text);
+  return r.ok ? r.file : null;
 }
 
 /** Was ein Import an einem Kanal oder einer Sprechstelle taete. */
@@ -675,6 +799,12 @@ export interface IntercomPlanDiff {
    * Servers, aber auch nichts, was still verschwinden darf.
    */
   danglingMemberships: { station: string; channelId: string }[];
+  /**
+   * Was in der Datei stand und gar nicht erst angekommen ist. Aus
+   * `IntercomPlanFile.skipped` durchgereicht — der Abgleich ist die Stelle,
+   * an der jemand hinsieht, bevor er uebernimmt.
+   */
+  skipped: PlanSkipped[];
 }
 
 const vendorColors = (
@@ -797,6 +927,7 @@ export function diffIntercomPlan(state: CoreState, file: IntercomPlanFile): Inte
     channels,
     users,
     danglingMemberships,
+    skipped: file.skipped,
   };
 }
 

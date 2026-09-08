@@ -3,3 +3,7 @@ dist/
 coverage/
 *.log
 apps/web/certs/
+
+# Sicherungskopien, die `atomicWrite` beim Speichern anlegt (configStore.ts).
+# Sie gehoeren dem laufenden Geraet, nicht dem Repo.
+data/configs/*.bak

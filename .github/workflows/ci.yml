@@ -87,6 +87,13 @@ jobs:
       - name: Mikrofon-Pegel und PCM kommen aus einer Rechnung
         run: npm run audio:check
 
+      # Der Plan-Import schreibt SPRECHBERECHTIGUNGEN. Sein Vertrag prueft
+      # deshalb nicht nur, ob `version` eine Zahl ist, sondern welche — und
+      # nennt jeden Eintrag, den er nicht lesen konnte, statt ihn still
+      # wegzuwerfen.
+      - name: Der Plan-Vertrag prueft die Bedeutung, nicht nur die Namen
+        run: npm run plan:check
+
       - name: Kern starten
         run: |
           MOCK_DEVICES=1 node apps/server/dist/index.js > /tmp/intercom.log 2>&1 &
