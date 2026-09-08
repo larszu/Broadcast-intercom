@@ -40,6 +40,7 @@ import {
 	defaultCallBehavior,
 	diffIntercomPlan,
 	readIntercomPlan,
+	applyAudioControl,
 	SYSTEM_CHANNEL_ANNOUNCEMENT,
 	SYSTEM_CHANNEL_EMERGENCY,
 	SYSTEM_CHANNEL_PROGRAM,
@@ -1517,26 +1518,20 @@ app.post("/api/control/action", (req, res) => {
 			broadcastState();
 			break;
 		}
-		case "mute_input": {
-			if (!device) { res.status(404).json({ ok: false, error: "Device not found" }); return; }
-			device.audio = device.audio || defaultAudioSettings(device.transport);
-			device.audio.inputGainDb = -60;
-			broadcastState();
-			break;
-		}
-		case "mute_output": {
-			if (!device) { res.status(404).json({ ok: false, error: "Device not found" }); return; }
-			device.audio = device.audio || defaultAudioSettings(device.transport);
-			device.audio.outputGainDb = -60;
-			broadcastState();
-			break;
-		}
+		case "mute_input":
+		case "mute_output":
+		case "unmute_input":
+		case "unmute_output":
 		case "volume_up":
 		case "volume_down": {
 			if (!device) { res.status(404).json({ ok: false, error: "Device not found" }); return; }
-			device.audio = device.audio || defaultAudioSettings(device.transport);
-			const delta = action === "volume_up" ? 3 : -3;
-			device.audio.outputGainDb = Math.max(-60, Math.min(12, device.audio.outputGainDb + delta));
+			// Die Regel steht in `applyAudioControl` (@broadcast/shared), nicht
+			// hier: Stummschalten merkt sich den Pegel, nochmal Stummschalten
+			// holt ihn zurueck. Vorher war Stumm eine Einbahnstrasse — mitten
+			// in einer Sendung nur ueber den Schieberegler in der
+			// Weboberflaeche zu loesen.
+			const vorgabe = defaultAudioSettings(device.transport);
+			device.audio = applyAudioControl(device.audio || vorgabe, action, vorgabe.outputGainDb);
 			broadcastState();
 			break;
 		}

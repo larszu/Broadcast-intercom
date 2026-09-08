@@ -36,6 +36,121 @@ export interface AudioSettings {
   sidetonePercent: number;
   noiseGateDb: number;
   limiterEnabled: boolean;
+  /**
+   * Der Pegel VOR dem Stummschalten, damit „wieder laut" ihn zurueckholen
+   * kann. Fehlt, solange nicht stumm geschaltet ist — ein Feld, das in jedem
+   * Datensatz steht und nichts bedeutet, waere Ballast.
+   */
+  preMuteInputGainDb?: number;
+  preMuteOutputGainDb?: number;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Lautstaerke und Stumm — eine Stelle, und ein Weg zurueck.
+//
+// BEFUND (Defektformen-Sweep, Form `fixture-erreicht-grenze-nicht`, gemessen
+// 2026-09-08). Der Kern kannte `mute_input`, `mute_output`, `volume_up` und
+// `volume_down`, und der Smoke-Test — 58 Pruefungen — beruehrt keine davon.
+// Die Grenze, an der sie sich treffen, ist deshalb nie erreicht worden, und
+// dort steckten zwei Fehler:
+//
+//   1. STUMM WAR EINE EINBAHNSTRASSE. `mute_input` setzte `inputGainDb = -60`
+//      und das war alles. Ein Zurueck gab es NICHT: kein `unmute`, und fuer
+//      den Eingang auch kein `volume_up`. Wer auf seiner Companion-Taste das
+//      eigene Mikrofon stumm schaltet, bekommt es nur ueber die Weboberflaeche
+//      und den Schieberegler zurueck — mitten in einer Sendung.
+//
+//   2. -60 dB HIESS ZWEIERLEI. Es ist der Stumm-Wert UND das untere Ende des
+//      Lautstaerkebereichs. Wer `volume_down` oft genug drueckt, landet auf
+//      exakt -60 und ist damit „stumm"; wer danach `volume_up` drueckt,
+//      landet auf -57 dB — hoerbar, aber fast aus — statt dort, wo er
+//      vorher war.
+//
+// Die Regel ist jetzt in einem Satz sagbar, und sie steht an EINER Stelle:
+// Stummschalten merkt sich den Pegel, nochmal Stummschalten holt ihn zurueck,
+// und jede ausdrueckliche Lautstaerkeaenderung vergisst ihn wieder — dann hat
+// der Bediener uebernommen.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Unteres und oberes Ende des Ausgangspegels (dB). */
+export const AUDIO_GAIN_MIN_DB = -60;
+export const AUDIO_GAIN_MAX_DB = 12;
+/** Schrittweite einer Companion-Taste. */
+export const AUDIO_GAIN_STEP_DB = 3;
+
+export type AudioControlAction =
+  | 'mute_input'
+  | 'mute_output'
+  | 'unmute_input'
+  | 'unmute_output'
+  | 'volume_up'
+  | 'volume_down';
+
+export const AUDIO_CONTROL_ACTIONS: readonly AudioControlAction[] = [
+  'mute_input', 'mute_output', 'unmute_input', 'unmute_output',
+  'volume_up', 'volume_down',
+] as const;
+
+export const isAudioControlAction = (a: string): a is AudioControlAction =>
+  (AUDIO_CONTROL_ACTIONS as readonly string[]).includes(a);
+
+const klemme = (db: number): number =>
+  Math.max(AUDIO_GAIN_MIN_DB, Math.min(AUDIO_GAIN_MAX_DB, db));
+
+/**
+ * Eine Lautstaerke-/Stumm-Aktion auf die Audio-Einstellungen anwenden.
+ *
+ * Rein: gibt neue Einstellungen zurueck, aendert nichts. `fallbackDb` ist der
+ * Pegel, auf den „wieder laut" faellt, wenn nichts gemerkt wurde (der Vorgabe-
+ * Pegel des Transports).
+ *
+ * `mute_*` ist ein UMSCHALTER: dieselbe Companion-Taste macht stumm und wieder
+ * laut. Genau das erwartet jemand von einer Taste mit „Mute" darauf.
+ */
+export function applyAudioControl(
+  audio: AudioSettings,
+  action: AudioControlAction,
+  fallbackDb = 0,
+): AudioSettings {
+  const stumm = (feld: 'input' | 'output'): AudioSettings => {
+    const gain = feld === 'input' ? 'inputGainDb' : 'outputGainDb';
+    const merker = feld === 'input' ? 'preMuteInputGainDb' : 'preMuteOutputGainDb';
+    // Kein „schon stumm?"-Vorbehalt: `stumm` wird nur aufgerufen, wenn es
+    // NICHT stumm ist — der Umschalter unten entscheidet das. Eine Zeile, die
+    // nichts tut, aber aussieht, als hielte sie eine Zusicherung, ist
+    // schlimmer als keine; die Gegenprobe hat sie als unerreichbar entlarvt.
+    return { ...audio, [merker]: audio[gain], [gain]: AUDIO_GAIN_MIN_DB };
+  };
+  const laut = (feld: 'input' | 'output'): AudioSettings => {
+    const gain = feld === 'input' ? 'inputGainDb' : 'outputGainDb';
+    const merker = feld === 'input' ? 'preMuteInputGainDb' : 'preMuteOutputGainDb';
+    const zurueck = audio[merker];
+    const next = { ...audio, [gain]: klemme(typeof zurueck === 'number' ? zurueck : fallbackDb) };
+    delete next[merker];
+    return next;
+  };
+  const istStumm = (feld: 'input' | 'output') =>
+    audio[feld === 'input' ? 'inputGainDb' : 'outputGainDb'] <= AUDIO_GAIN_MIN_DB;
+
+  switch (action) {
+    case 'mute_input':
+      return istStumm('input') ? laut('input') : stumm('input');
+    case 'mute_output':
+      return istStumm('output') ? laut('output') : stumm('output');
+    case 'unmute_input':
+      return laut('input');
+    case 'unmute_output':
+      return laut('output');
+    case 'volume_up':
+    case 'volume_down': {
+      // Eine ausdrueckliche Aenderung vergisst den Merker: ab hier bestimmt
+      // der Bediener den Pegel, nicht mehr das, was vor dem Stummschalten war.
+      const delta = action === 'volume_up' ? AUDIO_GAIN_STEP_DB : -AUDIO_GAIN_STEP_DB;
+      const next = { ...audio, outputGainDb: klemme(audio.outputGainDb + delta) };
+      delete next.preMuteOutputGainDb;
+      return next;
+    }
+  }
 }
 
 export interface UserPermissions {
@@ -293,6 +408,11 @@ export type ControlAction =
   | "ptt_stop"
   | "mute_input"
   | "mute_output"
+  // Der Weg zurueck. `mute_*` ist zwar ein Umschalter (eine Companion-Taste
+  // soll beides koennen), aber ein Aufrufer, der den Zustand KENNT, soll ihn
+  // nicht erraten muessen.
+  | "unmute_input"
+  | "unmute_output"
   | "set_selected_slot"
   | "volume_up"
   | "volume_down"

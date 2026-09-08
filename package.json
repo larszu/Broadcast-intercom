@@ -21,7 +21,8 @@
     "config:check": "node scripts/config-atomic-check.mjs",
     "brand:check": "node scripts/brand-tokens-check.mjs",
     "audio:check": "node scripts/audio-level-check.mjs",
-    "plan:check": "node scripts/plan-contract-check.mjs"
+    "plan:check": "node scripts/plan-contract-check.mjs",
+    "audio:control": "node scripts/audio-control-check.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.2.0",
