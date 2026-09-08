@@ -94,6 +94,14 @@ jobs:
       - name: Der Plan-Vertrag prueft die Bedeutung, nicht nur die Namen
         run: npm run plan:check
 
+      # Defektformen-Sweep, Form `fixture-erreicht-grenze-nicht`: der
+      # Smoke-Test beruehrt die Lautstaerke-Aktionen mit keiner seiner 58
+      # Pruefungen. Die Grenze bei -60 dB — Stumm-Wert UND unteres Ende des
+      # Bereichs — war deshalb nie erreicht, und Stumm war eine
+      # Einbahnstrasse.
+      - name: Lautstaerke und Stumm an ihrer Grenze
+        run: npm run audio:control
+
       - name: Kern starten
         run: |
           MOCK_DEVICES=1 node apps/server/dist/index.js > /tmp/intercom.log 2>&1 &
