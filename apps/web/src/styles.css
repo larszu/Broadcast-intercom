@@ -236,6 +236,77 @@ input:focus, select:focus, textarea:focus {
 .matrixCell.self { background: var(--bg3); color: var(--border); cursor: default; }
 .chBadgeTiny { font-size: 9px; padding: 2px 5px; border-radius: 0; color: #fff; margin-top: 3px; display: inline-block; }
 
+/* ── SCHIEBEREGLER ─────────────────────────────────────────
+ *
+ * Nutzer-Meldung 2026-09-09: „Passe auch die Ui von allen slidern an sodass
+ * man sie gut bedienen kann."
+ *
+ * GEMESSEN VORHER: fuer `input[type=range]` stand hier nur BREITE (`flex: 1`,
+ * `width: 120px`, `width: 100px`, `width: 80px`). Die Hoehe blieb, was der
+ * Browser vorgibt — in WebKit rund 16 px. WCAG 2.2, Erfolgskriterium 2.5.8
+ * („Target Size (Minimum)", Stufe AA), nennt 24 px als Mindestmass.
+ *
+ * Das ist hier keine Kosmetik. An diesen Reglern haengen Lautstaerke, die
+ * VOX-Schwelle und die Kompressor-Schwelle einer laufenden Intercom-Anlage.
+ * Wer im Betrieb danebengreift, dreht am falschen Wert oder verreisst den
+ * getroffenen — beides mitten in einer Sendung, beides hoerbar.
+ *
+ * Das ELEMENT wird 24 px hoch, nicht die Bahn: die Regler sitzen in
+ * `.sliderRow`/`.settingsRow`-Zeilen neben Beschriftung und Wert, und ein
+ * 24 px hoher Balken sprengt jede davon. Die Breiten-Regeln weiter unten
+ * bleiben unberuehrt — sie setzen nur `width`.
+ *
+ * Der Griff bleibt ECKIG: der Marken-Guide legt „keine Rundungen" fest
+ * (`--radius: 0`), `brand:check` haelt es fest. Den Fokusring zeichnet die
+ * allgemeine `:focus-visible`-Regel weiter unten mit 3 px Abstand — der passt
+ * hier, weil er aussen liegt.
+ *
+ * Firefox braucht seine eigenen Pseudo-Elemente; ohne sie bliebe es dort beim
+ * Standardaussehen, und die Messung staende nur fuer einen Browser. */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 24px;            /* Trefferflaeche, nicht Bahnhoehe */
+  background: transparent; /* die Bahn zeichnen die Pseudo-Elemente */
+  cursor: pointer;
+  touch-action: manipulation;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  background: var(--bg4);
+  border: 1px solid var(--border);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: var(--accent);
+  border: 2px solid var(--bg4);
+  border-radius: 0;
+  /* Der Griff sitzt auf der Bahn, nicht daneben: (6 px Bahn - 18 px Griff)
+     / 2 = -6 px, plus 1 px Rahmen der Bahn. */
+  margin-top: -7px;
+  cursor: pointer;
+}
+input[type="range"]::-moz-range-track {
+  height: 6px;
+  background: var(--bg4);
+  border: 1px solid var(--border);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: var(--accent);
+  border: 2px solid var(--bg4);
+  border-radius: 0;
+  cursor: pointer;
+}
+input[type="range"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 /* ── AUDIO ─────────────────────────────────────────────── */
 .audioCard { background: var(--bg2); border: 1px solid var(--border); border-radius: 0; margin-bottom: 10px; overflow: hidden; }
 .audioCardHeader { padding: 12px 16px; cursor: pointer; display: flex; align-items: center; gap: 8px; }
