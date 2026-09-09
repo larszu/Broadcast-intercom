@@ -136,12 +136,47 @@ Without certificates the web dev server automatically serves plain HTTP — ever
 ### Running
 
 ```bash
+./dev.sh               # Linux / macOS — server + web UI with simulated beltpacks
+./dev.sh --no-mock     # …without the simulation (real devices on the network)
+./dev.sh --server      # server only (headless, for Companion / tests)
+
+.\dev.ps1              # Windows — same three, via -NoMock / plain
+```
+
+Or the npm scripts directly:
+
+```bash
 npm run dev            # server (:4001) + web UI (:5200)
 npm run dev:mock       # same, with simulated beltpacks generating live traffic
 npm run dev:server     # server only (useful for headless testing / Companion)
 ```
 
 Open **http://localhost:5200** (or `https://` if you generated certificates).
+
+**No hardware needed.** `dev:mock` spawns simulated beltpacks that generate
+live traffic; the whole intercom — channels, calls, audio control, the plan
+contract — can be exercised on a laptop. `dev.sh` uses it by default and
+checks the Node version *before* starting, so a too-old Node fails with a
+sentence about the version instead of a syntax error somewhere inside the
+bundler.
+
+**Other devices on the same network.** The server binds every interface, and
+on startup it now prints the addresses you can actually hand out:
+
+```
+Intercom core on http://localhost:4001
+               http://192.168.1.42:4001  (im selben Netz)
+```
+
+Before, only `localhost` was printed — the server was reachable from the LAN
+the whole time and nobody was told under which address. All detected
+addresses are listed rather than one being guessed: on a machine with a
+Docker or VPN bridge the first one is often the wrong one, and whoever reads
+the list recognises their own. The web UI (`:5200`) already serves on every
+interface via Vite's `host: true`.
+
+For microphone access from another device the browser needs HTTPS — that is
+what the optional mkcert step above is for.
 
 ---
 

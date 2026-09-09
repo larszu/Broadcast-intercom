@@ -1934,7 +1934,31 @@ initializeState()
 		// Eagerly attempt to load Vosk so moduleLoaded reflects true state from the start
 		loadVoskIfAvailable();
 		server.listen(PORT, () => {
+			// DIE ADRESSE, DIE MAN WEITERSAGEN KANN.
+			//
+			// Hier stand nur `localhost`. Der Server bindet ohne Host-Angabe
+			// alle Schnittstellen — er war also die ganze Zeit im Netz
+			// erreichbar, und niemand erfuhr, unter welcher Adresse. Ein
+			// Beltpack auf einem Handy im selben WLAN ist aber der
+			// Normalfall dieser Anwendung und nicht die Ausnahme.
 			console.log(`Intercom core on http://localhost:${PORT}`);
+			// UND DIE ADRESSEN, DIE MAN WEITERSAGEN KANN.
+			//
+			// Hier stand nur `localhost`. Der Server bindet ohne Host-Angabe
+			// alle Schnittstellen — er war also die ganze Zeit im Netz
+			// erreichbar, und niemand erfuhr, unter welcher Adresse. Ein
+			// Beltpack auf einem Handy im selben WLAN ist aber der Normalfall
+			// dieser Anwendung, nicht die Ausnahme.
+			//
+			// `getLanHosts()` stand schon da und beantwortet genau diese
+			// Frage; eine zweite Erkennung daneben waere die Defektform
+			// `zwei-rechnungen` im Kleinen. Es werden ALLE gefundenen
+			// Adressen genannt und nicht eine geraten: auf einem Rechner mit
+			// Docker- oder VPN-Bruecke ist die erste oft die falsche, und wer
+			// die Liste sieht, erkennt seine eigene.
+			for (const host of getLanHosts()) {
+				console.log(`               http://${host}:${PORT}  (im selben Netz)`);
+			}
 		});
 	})
 	.catch((error) => {
