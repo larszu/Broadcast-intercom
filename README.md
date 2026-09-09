@@ -6,6 +6,25 @@ A self-hosted, browser-based production intercom system for live events and broa
 
 ---
 
+## The web page
+
+Every push to the default branch builds this repo's page from
+`.github/workflows/pages.yml` and publishes it:
+
+**https://larszu.github.io/Broadcast-intercom/**
+
+The workflow **asks the Pages API before it configures anything.** With no
+Pages site it still builds — that is a real check — and skips only the
+publishing step, with a warning and the one missing step in the run summary.
+A run that must stay red for a click nobody made teaches people to ignore red.
+
+Measured 2026-09-09: **built, not published.** The build runs and passes; the
+`deploy` job is skipped because this repo has no Pages site yet. That switch is
+the one thing no workflow can flip (`GITHUB_TOKEN` may not create a site):
+Settings → Pages → Source → **GitHub Actions**. After that the next push
+publishes by itself — nothing in this repo needs changing.
+
+---
 ## Features
 
 - **Group channels (Partylines)** — multi-party talk groups, each user can hold up to 8 configurable slots
