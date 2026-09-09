@@ -58,6 +58,13 @@ jobs:
       - name: Oberflaechen-Regeln (ADR-007)
         run: npm run brand:check
 
+      # An den Reglern haengen Lautstaerke, VOX-Schwelle und
+      # Kompressor-Schwelle einer LAUFENDEN Anlage. Wer im Betrieb
+      # danebengreift, dreht am falschen Wert oder verreisst den getroffenen —
+      # beides mitten in einer Sendung. WCAG 2.2 SC 2.5.8 nennt 24 px.
+      - name: Schieberegler sind zu treffen (24 px, WCAG 2.5.8)
+        run: npm run slider:check
+
       # Fragt die action.yml jedes Pins nach ihrer Node-Version, statt sie in
       # einem Kommentar zu behaupten. Am 2026-09-05 liefen hier BEIDE Actions
       # auf dem abgekuendigten node20, und niemandem ist es aufgefallen -- die
