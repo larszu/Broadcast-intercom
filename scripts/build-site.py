@@ -23,9 +23,18 @@
 # stattdessen in der Lauf-Zusammenfassung, wo sie jemand liest, der sie
 # braucht.
 #
-# DIESE DATEI LIEGT IN MEHREREN REPOS UND IST DORT ZEICHENGLEICH. Wer sie
+# DIESE DATEI LIEGT IN VIER REPOS (Broadcast-intercom, sony-camera-bridge,
+# tally-pi, pi-media-station) UND SOLL DORT ZEICHENGLEICH SEIN. Wer sie
 # aendert, aendert sie ueberall — sonst sehen zwei Projektseiten verschieden
 # aus, ohne dass jemand das entschieden haette.
+#
+# DAS IST EINE ABSICHT UND KEINE GEMESSENE TATSACHE, und der Unterschied
+# gehoert hierhin: kein Lauf kann sie pruefen, weil kein Repo die anderen
+# drei sieht. Die av-planner-suite haelt ihre drei Kopien des
+# Quellsprachen-Klassifizierers mit `lang:parity` zusammen — die liegen dort
+# im selben Baum. Hier gibt es keinen solchen Baum. Wer diese Zeile fuer
+# einen Waechter haelt, irrt sich; sie ist eine Bitte an den naechsten
+# Leser.
 # ---------------------------------------------------------------------------
 import html
 import pathlib
@@ -45,6 +54,18 @@ TITEL = sys.argv[1] if len(sys.argv) > 1 else WURZEL.name
 # Verzeichnisse, die keine Doku sind. `_site` steht mit drin, damit ein
 # zweiter Lauf nicht seine eigene Ausgabe einliest.
 AUS = {"node_modules", ".git", "dist", "build", "release", "_site", "__pycache__", ".venv", "venv"}
+
+# Einzelne Dateien, die NICHT auf die Seite gehoeren, stehen in
+# `scripts/site-ignore.txt` — eine Zeile je Pfad, dahinter ein `#` und der
+# GRUND. Der Grund ist Pflicht und nicht Zierrat: die einzige Sorte
+# Ausnahme, die hier vorkommt, ist "sieht aus wie die Anwendung, bedient
+# aber nichts" (eine Oberflaeche, die ihre Daten von ihrem Geraet holt), und
+# wer das in einem halben Jahr liest, muss es ohne Nachfragen verstehen.
+#
+# Ein Eintrag, dessen Datei es nicht mehr gibt, laesst den Lauf fallen:
+# eine Ausnahme fuer etwas, das nicht mehr existiert, sieht aus wie eine
+# Regel und ist keine.
+AUSNAHMEN = WURZEL / "scripts" / "site-ignore.txt"
 
 VORLAGE = """<!doctype html>
 <html lang="{sprache}">
@@ -105,9 +126,39 @@ steht, steht dort.</footer>
 """
 
 
+def ausnahmen() -> dict[str, str]:
+    """Pfad -> Grund, aus `scripts/site-ignore.txt`."""
+    if not AUSNAHMEN.exists():
+        return {}
+    raus = {}
+    for nr, zeile in enumerate(AUSNAHMEN.read_text(encoding="utf-8").splitlines(), 1):
+        zeile = zeile.strip()
+        if not zeile or zeile.startswith("#"):
+            continue
+        pfad, trenner, grund = zeile.partition("#")
+        pfad, grund = pfad.strip(), grund.strip()
+        if not trenner or not grund:
+            sys.exit(f"{AUSNAHMEN.name}:{nr}: Ausnahme ohne Grund — `{pfad}`. Der Grund ist Pflicht.")
+        if not (WURZEL / pfad).exists():
+            sys.exit(
+                f"{AUSNAHMEN.name}:{nr}: `{pfad}` gibt es nicht (mehr). Eine Ausnahme fuer "
+                "etwas, das nicht existiert, sieht aus wie eine Regel und ist keine — Zeile loeschen."
+            )
+        raus[pfad] = grund
+    return raus
+
+
+RAUS = ausnahmen()
+
+
+def uebersprungen(rel: pathlib.Path) -> bool:
+    return rel.as_posix() in RAUS
+
+
 def quellen():
     for p in sorted(WURZEL.rglob("*.md")):
-        if any(teil in AUS for teil in p.relative_to(WURZEL).parts):
+        rel = p.relative_to(WURZEL)
+        if any(teil in AUS for teil in rel.parts) or uebersprungen(rel):
             continue
         yield p
 
@@ -168,20 +219,35 @@ def main() -> int:
         )
         gebaut.append((rel, z.relative_to(ZIEL)))
 
-    # Bilder, damit Screenshots nicht ins Leere zeigen — plus LICENSE, weil
-    # fast jedes README darauf verlinkt und der Link sonst der einzige tote
-    # auf der ganzen Seite waere.
+    # Anhaenge, auf die die Doku zeigt. Bilder, damit Screenshots nicht ins
+    # Leere zeigen; LICENSE, weil fast jedes README darauf verlinkt; und
+    # fertige `.html`/`.pdf`-Kapitel, die neben den Markdown-Dateien liegen
+    # (etwa eine handgeschriebene Architektur-Seite oder eine Anleitung, die
+    # nie Markdown war).
+    #
+    # `geschrieben` schuetzt davor, dass eine solche Datei eine gerade
+    # gerenderte Seite ueberschreibt: gaebe es `docs/x.md` UND `docs/x.html`,
+    # gewinnt das Gerenderte, und der Fall wird gemeldet statt still
+    # entschieden.
     kopiert = 0
-    BILDER = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"}
+    ANHANG = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".html", ".pdf"}
+    geschrieben = {z for _, z in gebaut}
+    ueberdeckt = []
     for p in sorted(WURZEL.rglob("*")):
         rel = p.relative_to(WURZEL)
         if not p.is_file() or any(teil in AUS for teil in rel.parts):
             continue
-        if p.suffix.lower() in BILDER or p.name.upper() in {"LICENSE", "LICENCE"}:
-            z = ZIEL / rel
-            z.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(p, z)
-            kopiert += 1
+        if p.suffix.lower() not in ANHANG and p.name.upper() not in {"LICENSE", "LICENCE"}:
+            continue
+        if uebersprungen(rel):
+            continue
+        if rel in geschrieben:
+            ueberdeckt.append(rel.as_posix())
+            continue
+        z = ZIEL / rel
+        z.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(p, z)
+        kopiert += 1
 
     if not (ZIEL / "index.html").exists():
         print("FEHLER: kein README.md im Wurzelverzeichnis — die Seite haette keine Startseite.")
@@ -201,8 +267,19 @@ def main() -> int:
             tot.append(f"{zrel.as_posix()} -> {ziel}")
 
     print(f"Seite gebaut: {len(gebaut)} Markdown-Datei(en), {kopiert} Bild(er)/Anhang.")
+    if RAUS:
+        print(f"\nBewusst NICHT auf der Seite ({len(RAUS)}):")
+        for pfad, grund in RAUS.items():
+            print(f"  {pfad} — {grund}")
     for rel, zrel in gebaut:
         print(f"  {rel.as_posix()} -> {zrel.as_posix()}")
+    if ueberdeckt:
+        print(
+            f"\n{len(ueberdeckt)} vorhandene HTML-Datei(en) wurden NICHT kopiert, weil an "
+            "derselben Stelle eine gerenderte Markdown-Seite steht:"
+        )
+        for z in ueberdeckt:
+            print(f"  {z}")
     if tot:
         print(f"\n{len(tot)} relative(r) Link(s) zeigen ins Leere (meist auf Quelldateien):")
         for z in sorted(set(tot)):
