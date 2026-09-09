@@ -96,7 +96,7 @@ check('jeder unlesbare Eintrag steht in `skipped`', sk.length === 7,
 	// Objekt), 2 Zugehoerigkeiten (ohne channelId, keine Objekte).
 	`gefunden: ${sk.length}`)
 check('… mit Angabe, WO er stand',
-	sk.every((e) => ['channel', 'station', 'membership'].includes(e.where) && e.index >= 1))
+	sk.every((e) => ['channel', 'station', 'membership', 'key'].includes(e.where) && e.index >= 1))
 check('… und WARUM', sk.every((e) => typeof e.reason === 'string' && e.reason.length > 0))
 check('der lesbare Rest kommt vollstaendig an',
 	mitMurks.ok && mitMurks.file.channels.length === 1 && mitMurks.file.stations.length === 1)
@@ -132,6 +132,102 @@ check('ein fremdes Format wird benannt',
 		const r = lies({ ...guterPlan(), format: 'etwas-anderes' })
 		return !r.ok && r.error.includes(INTERCOM_PLAN_FORMAT)
 	})())
+
+// ───────────────────────────────────────────────────────────────────────────
+// FORMAT-VERSION 2: die Tastenbelegung.
+//
+// Die Belegung ist eine REGIE-ENTSCHEIDUNG und keine Folge der
+// Zugehoerigkeit. Sie ueberlebt die Datei nur, wenn drei Dinge stimmen:
+//
+//   1. Die Versionsgrenze steht auf 2 — und lehnt 3 weiter ab.
+//   2. „Nichts gesagt" (`keys` fehlt) und „keine Taste belegt" (`keys: []`)
+//      bleiben unterscheidbar. Zusammengeworfen wuerde eine bewusst
+//      leergeraeumte Sprechstelle wie eine ununtersuchte behandelt.
+//   3. Was dieser Kern nicht unterbringt, wird GEMELDET. `IntercomUser` hat
+//      kein Tastenlayout; die Belegung stillschweigend fallen zu lassen
+//      hiesse, dass der Import „fertig" sagt und im Saal auf Taste 1 etwas
+//      anderes liegt als auf dem Plan.
+// ───────────────────────────────────────────────────────────────────────────
+console.log('\nFormat-Version 2: die Tastenbelegung')
+
+check('dieser Kern versteht Version 2',
+	INTERCOM_PLAN_VERSION === 2)
+check('… und lehnt Version 3 weiterhin ab',
+	(() => {
+		const r = lies({ ...guterPlan(), version: 3 })
+		return !r.ok && r.error.includes('Version 3')
+	})())
+
+const mitTasten = lies({
+	...guterPlan(),
+	stations: [
+		{
+			id: 's1', name: 'Regie',
+			memberships: [{ channelId: 'c1', talk: true, listen: true }],
+			keys: [
+				{ page: 1, button: 1, channelId: 'c1' },
+				{ page: 1, button: 2, channelId: 'c2' },
+			],
+		},
+		// Ausdruecklich leer: „diese Stelle hat keine Taste belegt".
+		{ id: 's2', name: 'Kamera 1', memberships: [], keys: [] },
+		// Gar nichts gesagt.
+		{ id: 's3', name: 'Ton', memberships: [] },
+	],
+})
+check('die Belegung kommt an', mitTasten.ok && mitTasten.file.stations[0].keys?.length === 2)
+check('… mit Seite, Taste und Kanal',
+	mitTasten.ok &&
+		JSON.stringify(mitTasten.file.stations[0].keys[0]) ===
+			JSON.stringify({ page: 1, button: 1, channelId: 'c1' }))
+check('eine LEERE Belegung bleibt eine leere Belegung',
+	mitTasten.ok && Array.isArray(mitTasten.file.stations[1].keys) &&
+		mitTasten.file.stations[1].keys.length === 0)
+check('… und „nichts gesagt" bleibt undefined',
+	mitTasten.ok && mitTasten.file.stations[2].keys === undefined)
+
+const kaputteTasten = lies({
+	...guterPlan(),
+	stations: [{
+		id: 's1', name: 'Regie', memberships: [],
+		keys: [
+			{ page: 1, button: 1, channelId: 'c1' },
+			{ page: 0, button: 1, channelId: 'c1' },      // Seite 0 gibt es nicht
+			{ page: 1, button: 2.5, channelId: 'c1' },    // halbe Taste
+			{ page: 1, button: 1 },                        // ohne Kanal
+			'keine Taste',
+		],
+	}],
+})
+const tastenFunde = kaputteTasten.ok ? kaputteTasten.file.skipped.filter((e) => e.where === 'key') : []
+check('unlesbare Tasten fallen nicht still weg', tastenFunde.length === 4,
+	JSON.stringify(tastenFunde))
+check('… und die lesbare bleibt',
+	kaputteTasten.ok && kaputteTasten.file.stations[0].keys?.length === 1)
+check('… mit der Sprechstelle als Kontext',
+	tastenFunde.every((e) => e.context === 'Regie'))
+check('eine keys-Angabe, die keine Liste ist, wird gemeldet',
+	(() => {
+		const r = lies({
+			...guterPlan(),
+			stations: [{ id: 's1', name: 'Regie', memberships: [], keys: 'egal' }],
+		})
+		return r.ok && r.file.skipped.some((e) => e.where === 'station' && /keys/.test(e.reason)) &&
+			r.file.stations[0].keys === undefined
+	})())
+
+const diffTasten = diffIntercomPlan(leererKern, mitTasten.file)
+check('der Abgleich SAGT, dass er die Belegung nicht uebernimmt',
+	diffTasten.keysNotApplied.length === 1 &&
+		diffTasten.keysNotApplied[0].station === 'Regie' &&
+		diffTasten.keysNotApplied[0].count === 2,
+	JSON.stringify(diffTasten.keysNotApplied))
+check('… und zaehlt eine ausdruecklich LEERE Belegung nicht als offenen Posten',
+	// Sonst stuende „Kamera 1: 0 Tasten nicht uebernommen" da — eine Meldung
+	// ueber nichts, und die naechste echte geht darin unter.
+	!diffTasten.keysNotApplied.some((e) => e.station === 'Kamera 1'))
+check('ein Plan ohne jede Belegung meldet nichts',
+	diffIntercomPlan(leererKern, gut.file).keysNotApplied.length === 0)
 
 console.log(`\n${pass} bestanden, ${fail} fehlgeschlagen`)
 process.exit(fail === 0 ? 0 : 1)

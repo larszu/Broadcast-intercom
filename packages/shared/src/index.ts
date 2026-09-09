@@ -634,13 +634,21 @@ export const INTERCOM_PLAN_FORMAT = "avplan-intercom";
  * Alle Schwester-Formate dieser Familie lehnen eine zu neue Version ab
  * (`camera-list`, `.avplan`, `venue-exchange`, `avplan-inventory`). Dieses
  * eine nicht.
+ *
+ * ANGEHOBEN AUF 2 am 2026-09-09, und zwar aus genau dem Grund, den der
+ * Absatz darueber beschreibt. Version 2 traegt die TASTENBELEGUNG der
+ * Sprechstellen (`PlanStation.keys`). Ein v1-Leser wuerde eine v2-Datei
+ * annehmen und die Belegung stillschweigend fallen lassen — er kennt das Feld
+ * nicht. Genau deshalb gehoert die Ablehnung zur Erweiterung: der Planer hebt
+ * seine Version, dieser Kern hebt seine, und wer nur eine Seite aktualisiert,
+ * bekommt eine ehrliche Fehlermeldung statt einer halben Uebernahme.
  */
-export const INTERCOM_PLAN_VERSION = 1;
+export const INTERCOM_PLAN_VERSION = 2;
 
 /** Ein Eintrag, den die Datei enthielt und der Kern nicht uebernehmen konnte. */
 export interface PlanSkipped {
   /** Wo er stand. */
-  where: "channel" | "station" | "membership";
+  where: "channel" | "station" | "membership" | "key";
   /** Position in der Datei, 1-basiert — damit man ihn wiederfindet. */
   index: number;
   /** Wozu er gehoerte, sofern lesbar (Sprechstellen-Name bei Zugehoerigkeiten). */
@@ -663,6 +671,22 @@ export interface PlanMembership {
   listen: boolean;
 }
 
+/**
+ * Eine Taste auf der Sprechstelle: welche Konferenz liegt auf welchem Platz.
+ *
+ * Format-Version 2. Die Belegung ist eine REGIE-ENTSCHEIDUNG und keine Folge
+ * der Zugehoerigkeit: wer auf drei Konferenzen haengt, hat nicht dadurch schon
+ * eine Reihenfolge. Sie steht deshalb neben `memberships` und nicht darin.
+ */
+export interface PlanKey {
+  /** Seite auf dem Geraet, ab 1. */
+  page: number;
+  /** Taste auf dieser Seite, ab 1. */
+  button: number;
+  /** Die Konferenz, die auf dieser Taste liegt. */
+  channelId: string;
+}
+
 /** Eine Sprechstelle / Rolle aus dem Plan ("Regie", "Kamera 1"). */
 export interface PlanStation {
   id: string;
@@ -671,6 +695,22 @@ export interface PlanStation {
   memberships: PlanMembership[];
   /** Geraet im Verkabelungsplan — hier nur durchgereicht, nicht aufgeloest. */
   equipmentId?: string;
+  /**
+   * Die Tastenbelegung, wenn der Plan sie fuehrt (Format-Version 2).
+   *
+   * DREI ZUSTAENDE, NICHT ZWEI, und der Unterschied ist der Grund fuer das
+   * Fragezeichen:
+   *
+   *   `undefined` — der Plan sagt nichts ueber die Belegung dieser Stelle.
+   *   `[]`        — der Plan sagt: diese Stelle hat KEINE Taste belegt.
+   *   Eintraege   — so liegt sie.
+   *
+   * Die ersten beiden zusammenzuwerfen hiesse, eine bewusst leergeraeumte
+   * Sprechstelle wie eine ununtersuchte zu behandeln. Dieselbe Unterscheidung
+   * fuehrt der Planer auf seiner Seite (`GreenGoUser.keys`), und sie muss
+   * ueber die Datei ueberleben, sonst ist sie beim ersten Austausch weg.
+   */
+  keys?: PlanKey[];
 }
 
 export interface IntercomPlanFile {
@@ -843,12 +883,51 @@ export function readIntercomPlan(text: string): IntercomPlanRead {
         });
       });
     }
+    // Format-Version 2: die Tastenbelegung. FEHLT das Feld, bleibt es
+    // `undefined` — „der Plan sagt nichts dazu". Steht dort eine leere Liste,
+    // bleibt sie leer: „keine Taste belegt". Beides zusammenzuwerfen hiesse,
+    // eine bewusst leergeraeumte Sprechstelle wie eine ununtersuchte zu
+    // behandeln.
+    let keys: PlanKey[] | undefined;
+    if (x.keys !== undefined && !Array.isArray(x.keys)) {
+      uebersprungen("station", i, "keys ist keine Liste", name);
+    } else if (Array.isArray(x.keys)) {
+      keys = [];
+      (x.keys as unknown[]).forEach((k, j) => {
+        if (!k || typeof k !== "object") {
+          uebersprungen("key", j, "kein Objekt", name);
+          return;
+        }
+        const z = k as Record<string, unknown>;
+        if (typeof z.channelId !== "string" || !z.channelId.trim()) {
+          uebersprungen("key", j, "ohne Kanal-Kennung", name);
+          return;
+        }
+        // Seite und Taste zaehlen ab 1. Eine 0 oder eine Kommazahl ist kein
+        // Platz auf einem Geraet; sie zu runden hiesse, eine Taste zu
+        // erfinden, auf die dann jemand drueckt.
+        if (!Number.isInteger(z.page) || (z.page as number) < 1) {
+          uebersprungen("key", j, "Seite ist keine ganze Zahl ab 1", name);
+          return;
+        }
+        if (!Number.isInteger(z.button) || (z.button as number) < 1) {
+          uebersprungen("key", j, "Taste ist keine ganze Zahl ab 1", name);
+          return;
+        }
+        keys!.push({
+          page: z.page as number,
+          button: z.button as number,
+          channelId: z.channelId,
+        });
+      });
+    }
     stations.push({
       id: x.id,
       name,
       ...(typeof x.shortName === "string" ? { shortName: x.shortName } : {}),
       memberships,
       ...(typeof x.equipmentId === "string" ? { equipmentId: x.equipmentId } : {}),
+      ...(keys !== undefined ? { keys } : {}),
     });
   });
 
@@ -925,6 +1004,28 @@ export interface IntercomPlanDiff {
    * an der jemand hinsieht, bevor er uebernimmt.
    */
   skipped: PlanSkipped[];
+  /**
+   * FORMAT-VERSION 2: Tastenbelegungen, die in der Datei stehen und von
+   * DIESEM Kern nicht uebernommen werden.
+   *
+   * Der Grund ist keine Nachlaessigkeit, sondern eine Tatsache ueber diese
+   * Anlage: `IntercomUser` fuehrt keine Tastenbelegung. Es gibt hier kein
+   * Feld, in das eine Seite und eine Tastennummer geschrieben werden
+   * koennten. Der Plan darf sie trotzdem tragen — er beschreibt eine Anlage,
+   * die er nicht kennt.
+   *
+   * Was daraus folgt, ist ADR-005 Regel 3, angewandt auf den Abgleich:
+   * bewahren, verweigern oder MELDEN. Bewahren geht nicht (kein Feld),
+   * verweigern waere unverhaeltnismaessig (der Rest der Datei ist
+   * einwandfrei) — also wird es gemeldet, und zwar an der Stelle, an der
+   * jemand vor dem Uebernehmen hinsieht. Stillschweigend fallen zu lassen
+   * hiesse: die Regie hat die Belegung geplant, der Import sagte „fertig",
+   * und im Saal liegt auf Taste 1 etwas anderes als auf dem Plan.
+   *
+   * Leer heisst: keine Datei-Belegung offen — entweder trug die Datei keine,
+   * oder es gibt sie hier eines Tages doch.
+   */
+  keysNotApplied: { station: string; count: number }[];
 }
 
 const vendorColors = (
@@ -1048,6 +1149,14 @@ export function diffIntercomPlan(state: CoreState, file: IntercomPlanFile): Inte
     users,
     danglingMemberships,
     skipped: file.skipped,
+    // Format-Version 2. Gemeldet wird, was die Datei traegt und dieser Kern
+    // nicht unterbringt — mit Anzahl, damit der Satz eine Groesse hat und
+    // nicht nur ein Gefuehl. Eine leere Belegung (`keys: []`) ist KEIN
+    // offener Posten: die Datei sagt dort ausdruecklich „keine Taste
+    // belegt", und daran ist nichts zu uebernehmen.
+    keysNotApplied: file.stations
+      .filter((s) => (s.keys?.length ?? 0) > 0)
+      .map((s) => ({ station: s.name, count: s.keys!.length })),
   };
 }
 
