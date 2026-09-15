@@ -17,6 +17,8 @@
   --text:    #E1ECEF;   /* Eisblau — Fliesstext auf Dunkel */
   --text2:   #8C9CB3;   /* Stahlblau — Meta, Platzhalter */
   --text3:   #6E7F99;   /* abgeleitet */
+  /* Die Mindesthoehe eines Bedienpunkts — siehe den Block unter BASE ELEMENTS. */
+  --ziel: 32px;
   /* Aktionsflaeche der Marke: Off-White, darauf Navy — 13:1 statt 4:1. */
   --accent:  #F6F5F0;
   --accent2: #FFFFFF;
@@ -42,6 +44,38 @@ body {
   color: var(--text);
   font-family: 'Public Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   JEDER BEDIENPUNKT TRAEGT EINEN FINGER (B-77).
+
+   GEMESSEN am 2026-09-15 mit der Sonde aus der Suite (`bedienbar:check`), die
+   diese Oberflaeche zum ersten Mal ueberhaupt angesehen hat. Auf der
+   Startseite, in allen drei Breiten:
+
+     input „Show name, e.g. main-event"   329 x 31
+     button „Create"                       69 x 29
+     button „Browse"                       73 x 29
+
+   Einunddreissig. Der Abstand zur Norm ist EIN Pixel, und genau deshalb steht
+   die Zahl hier: wer sie aus `padding` und `font-size` entstehen laesst, trifft
+   sie zufaellig oder nicht, und niemand merkt den Unterschied, bis jemand mit
+   einem Daumen danebengreift. Diese Oberflaeche wird an einem Intercom-Panel
+   bedient — im Zweifel waehrend einer Sendung.
+
+   WCAG 2.2 SC 2.5.8 setzt den Boden bei 24 px, SC 2.5.5 empfiehlt 44; 32 liegt
+   dazwischen und auf dem 8-px-Raster aus ADR-007. Dieselbe Zahl fuehren die
+   fuenf Planer der Suite und die Kamera-Bruecke.
+
+   Schieberegler, Kaestchen und Radioknoepfe bleiben aussen vor: sie sind flach
+   gebaut und werden ueber ihren Griff bedient — `input[type="range"]` hat
+   weiter unten seine eigenen Masse. */
+button, select, textarea, [role='button'],
+input:not([type='checkbox']):not([type='radio']):not([type='range']) {
+  min-height: var(--ziel);
+}
+button, [role='button'] {
+  min-width: var(--ziel);
 }
 
 /* ── BASE ELEMENTS ─────────────────────────────────────── */
