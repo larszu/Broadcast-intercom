@@ -48,8 +48,16 @@ export function StartScreen({ onEnter, api }: Props) {
         <div className="startSection">
           <h2>New configuration</h2>
           <div className="row">
+            {/* `aria-label` und nicht nur `placeholder` (B-77). Ein
+                Platzhalter ist KEIN Name: er verschwindet, sobald jemand
+                tippt, und ein Screenreader liest ihn je nach Browser gar
+                nicht vor. Wer das Feld nicht sieht, hoert dann „Eingabefeld"
+                und sonst nichts. Gemessen mit `bedienbar:check` am
+                2026-09-15 — es war das einzige namenlose Feld dieser
+                Oberflaeche. */}
             <input
               type="text"
+              aria-label="Show name"
               placeholder="Show name, e.g. main-event"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
