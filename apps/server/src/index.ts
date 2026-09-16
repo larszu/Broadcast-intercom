@@ -49,8 +49,26 @@ import {
 const PORT = Number(process.env.PORT || 4001);
 const MOCK_MODE = process.env.MOCK_DEVICES === "1";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const CONFIG_DIR = path.resolve(__dirname, "../../../data/configs");
-const MODEL_DIR = path.resolve(__dirname, "../../../data/models");
+// Datenverzeichnis (configs/, models/). Standard ist das repo-interne `data/`
+// relativ zum gebauten Server. In der Electron-Desktop-App liegt es dagegen im
+// beschreibbaren userData-Pfad, weil das gepackte asar read-only ist — der
+// Electron-Main-Prozess setzt dazu INTERCOM_DATA_DIR. Ein Override statt eines
+// festen Pfades, damit derselbe gebaute Server in beiden Welten schreibt.
+const DATA_DIR = process.env.INTERCOM_DATA_DIR
+	? path.resolve(process.env.INTERCOM_DATA_DIR)
+	: path.resolve(__dirname, "../../../data");
+const CONFIG_DIR = path.resolve(DATA_DIR, "configs");
+const MODEL_DIR = path.resolve(DATA_DIR, "models");
+// Gebautes Web-UI (apps/web/dist). Im Dev liefert Vite die UI aus und proxyt
+// /api + /ws hierher; im Produktions-/Desktop-Betrieb gibt es kein Vite, also
+// liefert der Kern die UI selbst aus — unter DERSELBEN Origin wie die API. Das
+// Web-UI setzt genau das voraus: es baut alle URLs aus location.origin
+// (fetch("/api/..."), WebSocket auf `${origin}/ws`), ein file://-Fenster oder
+// eine fremde Origin wuerde es brechen. WEB_DIST erlaubt dem Electron-Main, auf
+// den entpackten Resources-Pfad zu zeigen; sonst der Pfad relativ zum Server.
+const WEB_DIST = process.env.WEB_DIST
+	? path.resolve(process.env.WEB_DIST)
+	: path.resolve(__dirname, "../../web/dist");
 const DEFAULT_MODEL_URL = process.env.VOSK_MODEL_URL || "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip";
 const require = createRequire(import.meta.url);
 
@@ -495,6 +513,15 @@ async function loadConfig(configName: string): Promise<CoreState> {
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Statisches Web-UI ausliefern, wenn ein Build vorliegt (Produktions-/Desktop-
+// Fall). Muss VOR den /api-Routen stehen, schadet ihnen aber nicht: express
+// .static ruft next() fuer jede Anfrage ohne passende Datei, /api/* faellt also
+// durch zu den Handlern weiter unten. In der Dev-Umgebung existiert WEB_DIST
+// nicht -> uebersprungen, dort liefert Vite die UI.
+if (existsSync(WEB_DIST)) {
+	app.use(express.static(WEB_DIST));
+}
 
 const server = createServer(app);
 const wss = new WebSocketServer({ server, path: "/ws" });
@@ -1933,6 +1960,19 @@ initializeState()
 		emitEvent("system", `Intercom core running on :${PORT}${MOCK_MODE ? " (mock mode)" : ""}`);
 		// Eagerly attempt to load Vosk so moduleLoaded reflects true state from the start
 		loadVoskIfAvailable();
+		// SPA-Fallback: eine GET-Anfrage, die weder API noch WS noch eine
+		// vorhandene statische Datei ist, bekommt index.html. Muss NACH allen
+		// /api-Routen registriert werden, sonst verschluckt sie diese — deshalb
+		// erst hier, wenn das Modul vollstaendig ausgewertet ist. Nur aktiv, wenn
+		// ein Web-Build vorliegt (Produktions-/Desktop-Fall).
+		if (existsSync(WEB_DIST)) {
+			app.use((req, res, next) => {
+				if (req.method !== "GET" || req.path.startsWith("/api") || req.path === "/ws") {
+					return next();
+				}
+				res.sendFile(path.join(WEB_DIST, "index.html"));
+			});
+		}
 		server.listen(PORT, () => {
 			// DIE ADRESSE, DIE MAN WEITERSAGEN KANN.
 			//

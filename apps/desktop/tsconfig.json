@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "types": ["node"],
+    "noEmit": true,
+    "outDir": "dist"
+  },
+  "include": ["src", "build.mjs", "electron-builder.js"]
+}
