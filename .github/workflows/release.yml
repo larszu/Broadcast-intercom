@@ -1,0 +1,177 @@
+# ───────────────────────────────────────────────────────────────────────────
+# Release — baut beim Tag-Push (v*) die Desktop-App fuer Windows und macOS und
+# haengt Installer + Auto-Update-Manifeste ans GitHub-Release. Aufbau wie beim
+# Cable Planner: eine Matrix aus windows-latest + macos-latest baut je Plattform
+# native, ein nachgelagerter Job sammelt die Artefakte ein und erstellt das
+# Release.
+#
+# Broadcast Intercom ist im Kern ein Node-Server (Express + WS) plus Web-UI, kein
+# klassisches Electron-Projekt. Die Desktop-Huelle (`apps/desktop`) buendelt den
+# Kern als `server.cjs`, startet ihn aus dem Electron-Main-Prozess und zeigt die
+# vom Kern ausgelieferte UI im Fenster. electron-builder verpackt das zu .exe
+# (Windows) und .dmg + .zip (macOS) — dieselbe Gattung Artefakte wie beim Cable
+# Planner, inklusive der Manifeste fuer den eingebauten Updater.
+# ───────────────────────────────────────────────────────────────────────────
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+            build_args: --win
+          - os: macos-latest
+            name: macos
+            build_args: --mac --universal
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          # Node 22 wie in der CI. electron-builder 25 + electron 33 + vite 6
+          # laufen darauf; der Build-Host braucht nur ein modernes Node, die im
+          # Paket ausgelieferte Node-Runtime bringt Electron selbst mit.
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync package.json version to tag
+        # Tag und package.json.version driften sonst auseinander. electron-builder
+        # liest apps/desktop/package.json.version -> Dateiname
+        # "Broadcast Intercom-X.Y.Z-arch.ext" MUSS dem Tag entsprechen. Sowohl
+        # die Wurzel als auch das Desktop-Paket werden gesetzt (nur im Runner,
+        # ohne Commit/Tag). workflow_dispatch ohne Tag wird uebersprungen.
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          set -eu
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "Tag-Version: $TAG_VERSION"
+          npm version "$TAG_VERSION" --no-git-tag-version --allow-same-version
+          npm version "$TAG_VERSION" --no-git-tag-version --allow-same-version -w @broadcast/desktop
+          node -e "console.log('desktop version:', require('./apps/desktop/package.json').version)"
+
+      - name: Build core (shared + server + web)
+        run: npm run build
+
+      - name: Build desktop bundle (main + server)
+        run: npm run build -w @broadcast/desktop
+
+      - name: Package with electron-builder
+        # bash auf JEDEM OS erzwingen. Die Windows-Standardshell pwsh hat beim
+        # Cable Planner electron-builders Ausgabe UND Exit-Code verschluckt: der
+        # Schritt endete in Sekunden ohne Ausgabe, galt als Erfolg, und der
+        # Upload fand danach keine .exe. Git Bash ist auf windows-latest
+        # vorinstalliert, entspricht dem Default von macos-latest und reicht
+        # Nicht-Null-Exits ueber -eo pipefail durch. electron-builders cli.js
+        # wird direkt via node aufgerufen (der .cmd-Shim war Teil des
+        # pwsh-Problems).
+        working-directory: apps/desktop
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eo pipefail
+          set -x
+          node --version
+          CLI="$(node -e "console.log(require.resolve('electron-builder/cli.js'))")"
+          echo "electron-builder cli: $CLI"
+          node "$CLI" --config electron-builder.js ${{ matrix.build_args }} --publish never
+
+      - name: List release/ contents
+        # Macht im Log sichtbar, wenn electron-builder keine Artefakte erzeugt
+        # (der stille Fehlerfall, der beim Cable Planner auf Windows zuschlug).
+        shell: bash
+        run: ls -lh apps/desktop/release/ || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: broadcast-intercom-${{ matrix.name }}
+          path: |
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/latest*.yml
+          # Laut fehlschlagen, wenn ein Job keine Artefakte lieferte, statt ein
+          # halbes Release entstehen zu lassen.
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+
+      - name: Release-Vollstaendigkeit pruefen
+        # Ein halbes Release sieht auf der Release-Seite vollstaendig aus. Dieser
+        # Schritt prueft, dass JEDE Gattung da ist: beide Installer und die drei
+        # Dateien, die der eingebaute Auto-Updater braucht. Faellt eine weg,
+        # bricht der Lauf ab, statt die Luecke stumm zu veroeffentlichen.
+        shell: bash
+        run: |
+          set -eu
+          echo "--- heruntergeladene Artefakte ---"
+          find artifacts -type f | sort
+          echo "----------------------------------"
+          fehlt=0
+          pruefe() {
+            anzahl="$(find artifacts -type f -name "$1" | wc -l | tr -d ' ')"
+            if [ "$anzahl" -ge 1 ]; then
+              echo "ok   $1 ($anzahl)"
+            else
+              echo "FEHLT $1 -- $2"
+              fehlt=1
+            fi
+          }
+          pruefe '*.exe'          'Windows-Installer/Portable (windows-Job)'
+          pruefe '*.dmg'          'macOS-Download (macos-Job)'
+          pruefe '*.zip'          'macOS-Auto-Update: Squirrel.Mac spielt nur aus einem zip ein'
+          pruefe 'latest.yml'     'Update-Manifest Windows'
+          pruefe 'latest-mac.yml' 'Update-Manifest macOS'
+          if [ "$fehlt" -ne 0 ]; then
+            echo
+            echo "Erst den fehlenden Build-Job reparieren, dann den Tag neu setzen."
+            exit 1
+          fi
+
+      - name: Create GitHub Release
+        # Nicht nur die Installer: latest.yml (Windows) und latest-mac.yml (macOS)
+        # sind die Manifeste des eingebauten Updaters (electron-updater), das
+        # mac-.zip ist die Quelle, auf die latest-mac.yml zeigt, die .blockmaps
+        # ermoeglichen den differenziellen Download.
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            artifacts/**/*.exe
+            artifacts/**/*.dmg
+            artifacts/**/*.zip
+            artifacts/**/*.blockmap
+            artifacts/**/latest*.yml
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

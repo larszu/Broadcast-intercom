@@ -199,6 +199,35 @@ what the optional mkcert step above is for.
 
 ---
 
+## Desktop app (Windows / macOS)
+
+[`apps/desktop/`](apps/desktop/) is an Electron shell that packages the intercom
+core **and** the web UI into a double-clickable desktop app. The Electron main
+process starts the same core server (bundled to a single `server.cjs`) as a
+child process and opens a window on the UI it serves; other devices on the LAN
+still reach that same core over the network, exactly as before. The desktop app
+changes packaging only — not the client/server architecture.
+
+Build it locally:
+
+```bash
+npm run build                      # core: shared → server → web
+npm run build -w @broadcast/desktop # bundles main.cjs + server.cjs
+npm run dist  -w @broadcast/desktop # electron-builder → installers in apps/desktop/release/
+```
+
+Releases are built in CI: pushing a `v*` tag runs
+[`.github/workflows/release.yml`](.github/workflows/release.yml), which builds on
+`windows-latest` and `macos-latest` and attaches the `.exe` (Windows), `.dmg` +
+`.zip` (macOS universal) and the `electron-updater` manifests
+(`latest.yml` / `latest-mac.yml`) to the GitHub Release. macOS is ad-hoc signed
+(no paid certificate), so first launch needs right-click → **Open**; Windows is
+unsigned (SmartScreen shows "unknown publisher").
+
+Configs and Vosk models are stored in the OS user-data directory when running as
+the packaged app (the app bundle itself is read-only); the core reads
+`INTERCOM_DATA_DIR` to find them.
+
 ## Testing (headless)
 
 The core can be fully exercised without a browser. Start the server, then run the smoke test:
@@ -348,6 +377,8 @@ Request body: `{ action, deviceId?, slotIndex? }`. Actions that target a device
 |---|---|---|
 | `PORT` | `4001` | Core HTTP/WebSocket port |
 | `MOCK_DEVICES` | – | Set to `1` to spawn simulated beltpacks (`npm run dev:mock`) |
+| `INTERCOM_DATA_DIR` | `data/` next to the built server | Base dir for `configs/` + `models/`; the desktop app points this at the OS user-data dir |
+| `WEB_DIST` | `apps/web/dist` next to the built server | When present, the core serves the built web UI from here (same origin as the API); unset in dev, where Vite serves it |
 | `VOSK_MODEL_PATH` | `data/models/vosk-model-small-en-us-0.15` | Path to an unpacked Vosk model |
 | `VOSK_MODEL_URL` | small en-us model | Model download URL |
 | `VOSK_AUTO_DOWNLOAD` | – | Set to `1` to download the model on first start |
