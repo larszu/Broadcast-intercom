@@ -1068,6 +1068,13 @@ input[type="range"]:disabled {
   transition: background 0.15s;
 }
 .fbEntryAdd:hover { background: var(--accent); color: var(--accent-text); }
+/* Der Weg IN ein Plugin-Buendel (#24) — bewusst leiser als "+ Hinzufuegen":
+   er ist die Ausnahme, das Hinzufuegen der Normalfall. */
+.fbEntryOpen {
+  flex-shrink: 0; font-size: 11px; color: var(--text-dim);
+  padding: 1px 7px; border: 1px solid transparent;
+}
+.fbEntryOpen:hover { color: var(--text); border-color: var(--bg3); }
 
 /* Plugin path list */
 .pluginPathList { display: flex; flex-direction: column; gap: 4px; width: 100%; }

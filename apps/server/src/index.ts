@@ -1262,6 +1262,21 @@ app.patch("/api/audio/plugin-bridge", (req, res) => {
 	res.json({ ok: true, pluginBridge: state.pluginBridge });
 });
 
+/**
+ * Ist dieser Eintrag ein Plugin? (#24)
+ *
+ * Der Punkt, an dem die Auswahl bisher scheiterte: ein VST3 ist auf macOS
+ * und Linux KEINE Datei, sondern ein Ordner — `Reverb.vst3/Contents/...`.
+ * Genauso eine Audio-Unit (`.component`). Der Dateibrowser fragte nur
+ * `isDirectory()` und stieg deshalb in das Plugin HINEIN, statt es zu nehmen:
+ * wer auf sein Plugin tippte, sah `Contents` und `Resources`.
+ *
+ * Die Endung entscheidet, nicht die Frage Datei-oder-Ordner.
+ */
+function istPlugin(name: string): boolean {
+	return /\.(vst3|vst|dll|component|so)$/i.test(name);
+}
+
 // File-system browser for plugin path selection (server-local paths only)
 app.get("/api/fs/list", (req, res) => {
 	try {
@@ -1281,18 +1296,29 @@ app.get("/api/fs/list", (req, res) => {
 			const entries = readdirSync(fallback, { withFileTypes: true }).map((e) => ({
 				name: e.name,
 				isDir: e.isDirectory(),
+				isPlugin: istPlugin(e.name),
 				path: path.join(fallback, e.name),
 			}));
 			return res.json({ ok: true, path: fallback, entries, parent: null });
 		}
 		const entries = readdirSync(resolved, { withFileTypes: true })
-			.filter((e) => e.isDirectory() || /\.(vst3?|dll|component|so)$/i.test(e.name))
+			.filter((e) => e.isDirectory() || istPlugin(e.name))
 			.map((e) => ({
 				name: e.name,
 				isDir: e.isDirectory(),
+				// Ein Plugin kann beides sein: Ordner UND Plugin. Genau das
+				// stand bisher nicht in der Antwort, und die Oberflaeche musste
+				// raten — sie riet auf "Ordner".
+				isPlugin: istPlugin(e.name),
 				path: path.join(resolved, e.name),
 			}))
-			.sort((a, b) => (b.isDir ? 1 : 0) - (a.isDir ? 1 : 0) || a.name.localeCompare(b.name));
+			// Plugins zuerst, dann Ordner, dann der Rest: wer in
+			// /Library/Audio/Plug-Ins/VST3 steht, sucht ein Plugin und keinen
+			// Unterordner.
+			.sort((a, b) =>
+				(b.isPlugin ? 1 : 0) - (a.isPlugin ? 1 : 0)
+				|| (b.isDir ? 1 : 0) - (a.isDir ? 1 : 0)
+				|| a.name.localeCompare(b.name));
 		const parent = path.dirname(resolved) !== resolved ? path.dirname(resolved) : null;
 		res.json({ ok: true, path: resolved, entries, parent });
 	} catch (err) {

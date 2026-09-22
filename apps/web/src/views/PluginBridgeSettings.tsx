@@ -13,6 +13,16 @@ interface PluginBridgeConfig {
 interface FsEntry {
   name: string;
   isDir: boolean;
+  /**
+   * Ist dieser Eintrag ein Plugin? (#24)
+   *
+   * Beides zugleich ist der Normalfall: ein VST3 ist auf macOS und Linux ein
+   * ORDNER (`Reverb.vst3/Contents/...`), genauso eine Audio-Unit. Wer nur
+   * `isDir` fragt, steigt in das Plugin hinein statt es zu nehmen — und genau
+   * das tat dieser Browser: ein Tipp auf das eigene Plugin zeigte `Contents`
+   * und `Resources`.
+   */
+  isPlugin: boolean;
   path: string;
 }
 
@@ -51,8 +61,10 @@ function FileBrowserModal({ onSelect, onClose, api }: {
   useEffect(() => { void loadPath(); }, []);
 
   function navigate(e: FsEntry) {
-    if (e.isDir) void loadPath(e.path);
-    else onSelect(e.path);
+    // Plugin schlaegt Ordner. Ein Plugin-Buendel IST ein Ordner; hineinzugehen
+    // ist nie das, was jemand will, der ein Plugin auswaehlen soll.
+    if (e.isPlugin) onSelect(e.path);
+    else if (e.isDir) void loadPath(e.path);
   }
 
   return (
@@ -88,12 +100,28 @@ function FileBrowserModal({ onSelect, onClose, api }: {
             {!loading && listing?.entries.map((e) => (
               <div
                 key={e.path}
-                className={`fbEntry ${e.isDir ? "dir" : "file"}`}
+                className={`fbEntry ${e.isPlugin ? "file" : "dir"}`}
                 onClick={() => navigate(e)}
               >
-                <span className="fbEntryIcon">{e.isDir ? "📁" : "🎛"}</span>
+                <span className="fbEntryIcon">{e.isPlugin ? "🎛" : "📁"}</span>
                 <span className="fbEntryName">{e.name}</span>
-                {!e.isDir && <span className="fbEntryAdd" onClick={(ev) => { ev.stopPropagation(); onSelect(e.path); }}>+ Hinzufügen</span>}
+                {e.isPlugin && (
+                  <span className="fbEntryAdd" onClick={(ev) => { ev.stopPropagation(); onSelect(e.path); }}>
+                    + Hinzufügen
+                  </span>
+                )}
+                {/* Der Weg ins Buendel bleibt erreichbar, nur nicht mehr als
+                    Vorgabe: gelegentlich will man wirklich nachsehen, was drin
+                    ist. */}
+                {e.isPlugin && e.isDir && (
+                  <span
+                    className="fbEntryOpen"
+                    title="In das Plugin-Bündel hineinsehen"
+                    onClick={(ev) => { ev.stopPropagation(); void loadPath(e.path); }}
+                  >
+                    ↳ öffnen
+                  </span>
+                )}
               </div>
             ))}
           </div>
