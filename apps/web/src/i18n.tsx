@@ -198,6 +198,9 @@ const EN = {
   wizardSkip: "Skip",
   wizardNext: "Next",
   wizardFinish: "Get started",
+  // Der Weg statt der Beschreibung (#22): fuehrt durch das Anlegen des ersten
+  // Benutzers. Ohne einen einzigen bleibt jedes Beltpack ohne Rechte.
+  wizardShowMe: "Show me: create the first user",
   wizardReopenTip: "You can reopen this guide anytime with the ? button.",
 
   // ── Host Settings ──────────────────────────────────────
@@ -396,6 +399,7 @@ const DE: typeof EN = {
   wizardSkip: "\u00dcberspringen",
   wizardNext: "Weiter",
   wizardFinish: "Los geht\u2019s",
+  wizardShowMe: "Zeig es mir: ersten Benutzer anlegen",
   wizardReopenTip: "Du kannst diesen Guide jederzeit mit dem ? Button erneut \u00f6ffnen.",
   settingsTitle: "Einstellungen",
   settingsLanguage: "Sprache",

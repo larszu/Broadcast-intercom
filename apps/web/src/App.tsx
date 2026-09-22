@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+﻿import { useEffect, useState } from "react";
 import type { CoreState } from "@broadcast/shared";
 import { useIntercomStore } from "./hooks/useIntercomStore";
 import { StartScreen } from "./views/StartScreen";
@@ -6,6 +6,8 @@ import { PhoneClient } from "./views/PhoneClient";
 import { MonitorView } from "./views/MonitorView";
 import { ConfigView } from "./views/ConfigView";
 import { FirstStartWizard } from "./views/FirstStartWizard";
+import { FuehrungsHost } from "./views/FuehrungsHost";
+import { useFuehrung, fuehrungStarten, fuehrungErledigt } from "./lib/fuehrung";
 import { useLang } from "./i18n";
 
 type Page = "monitor" | "setup";
@@ -21,6 +23,39 @@ export default function App() {
   const [page, setPage] = useState<Page>("monitor");
   const [showWizard, setShowWizard] = useState(() => !isClientMode && !localStorage.getItem("wizardDone"));
   const [saveAsName, setSaveAsName] = useState("");
+
+  /*
+    Die Fuehrung (#22) wechselt die Seite nicht selbst — sie sagt nur, wo ihr
+    Ziel liegt, und jede Ebene schaltet ihren eigenen Zustand um. Sonst
+    haetten zwei Stellen dieselbe Hoheit ueber `page`, und wer die Seite
+    waehrend der Fuehrung von Hand wechselt, kaempft gegen sie an.
+  */
+  const fuehrung = useFuehrung();
+  useEffect(() => {
+    if (fuehrung.schritt?.seite && fuehrung.schritt.seite !== page) {
+      setPage(fuehrung.schritt.seite);
+    }
+  }, [fuehrung.schritt, page]);
+
+  /*
+    Beim ersten Start von selbst dorthin, wo es losgeht (#22).
+
+    Die Bedingung ist nicht „erster Start", sondern „es gibt keinen einzigen
+    Benutzer". Das ist dieselbe Lage und die ehrlichere Frage: wer die
+    Einfuehrung beim ersten Mal weggeklickt hat und beim zweiten Start immer
+    noch vor einer Anlage ohne Benutzer steht, hat dieselbe Huerde vor sich.
+    Umgekehrt faengt eine eingerichtete Anlage nach einem Browserwechsel
+    nicht wieder mit der Fuehrung an.
+
+    Einmal — `fuehrungErledigt()` merkt sich das Durchlaufen, und wer
+    abbricht, hat abgebrochen.
+  */
+  const ohneBenutzer = Object.keys(state.users || {}).length === 0;
+  useEffect(() => {
+    if (isClientMode || showStart || showWizard) return;
+    if (!ohneBenutzer || fuehrungErledigt()) return;
+    fuehrungStarten();
+  }, [isClientMode, showStart, showWizard, ohneBenutzer]);
   const [showSaveAs, setShowSaveAs] = useState(false);
 
   function handleEnter(loadedState: CoreState) {
@@ -69,6 +104,7 @@ export default function App() {
             {t.navMonitor}
           </button>
           <button
+            data-fuehrung="nav-setup"
             className={`topNavBtn ${page === "setup" ? "active" : ""}`}
             onClick={() => setPage("setup")}
           >
@@ -112,6 +148,7 @@ export default function App() {
       </main>
 
       {showWizard && <FirstStartWizard onDone={() => setShowWizard(false)} />}
+      <FuehrungsHost />
     </div>
   );
 }

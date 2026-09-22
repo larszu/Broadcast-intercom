@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLang } from "../i18n";
+import { fuehrungStarten } from "../lib/fuehrung";
 
 const TOTAL_STEPS = 3;
 
@@ -16,6 +17,21 @@ export function FirstStartWizard({ onDone }: { onDone: () => void }) {
   function finish() {
     localStorage.setItem("wizardDone", "1");
     onDone();
+  }
+
+  /**
+   * Schliesst die Folien und zeigt den Weg, statt ihn zu beschreiben (#22).
+   *
+   * Die drei Folien erklaerten, was ein Intercom ist und wie die PTT-Leiste
+   * geht — und liessen die eine Frage offen, die jemand beim ERSTEN Start
+   * wirklich hat: wie lege ich die Leute an, die nachher sprechen sollen?
+   * Ohne einen einzigen Benutzer bleibt jedes Beltpack ohne Rechte, und das
+   * merkt man erst, wenn das Handy stumm bleibt.
+   */
+  function fuehrungBeginnen() {
+    localStorage.setItem("wizardDone", "1");
+    onDone();
+    fuehrungStarten();
   }
 
   return (
@@ -49,7 +65,12 @@ export function FirstStartWizard({ onDone }: { onDone: () => void }) {
             )}
             {step < TOTAL_STEPS - 1
               ? <button className="btnAccent" onClick={() => setStep((s) => s + 1)}>{t.wizardNext}</button>
-              : <button className="btnAccent" onClick={finish}>{t.wizardFinish}</button>
+              : (
+                <>
+                  <button className="btnGhost" onClick={finish}>{t.wizardFinish}</button>
+                  <button className="btnAccent" onClick={fuehrungBeginnen}>{t.wizardShowMe}</button>
+                </>
+              )
             }
           </div>
         </div>

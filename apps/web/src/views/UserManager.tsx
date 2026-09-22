@@ -114,17 +114,18 @@ export function UserManager({ state, api }: Props) {
 
       <div className="addRow">
         <input
+          data-fuehrung="user-name"
           placeholder="Neuer Benutzername"
           value={createName}
           onChange={(event) => setCreateName(event.target.value)}
         />
-        <label>
+        <label data-fuehrung="user-rolle">
           Rolle
           <select value={createRole} onChange={(event) => setCreateRole(event.target.value as UserRole)}>
             {USER_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
           </select>
         </label>
-        <button onClick={addUser}>User anlegen</button>
+        <button data-fuehrung="user-anlegen" onClick={addUser}>User anlegen</button>
       </div>
 
       <div className="deviceTable">

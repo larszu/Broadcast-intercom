@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { CoreState, EventItem } from "@broadcast/shared";
 import { ChannelManager } from "./ChannelManager";
 import { MatrixView } from "./MatrixView";
 import { DeviceManager } from "./DeviceManager";
 import { UserManager } from "./UserManager";
+import { useFuehrung } from "../lib/fuehrung";
 import { AudioSettings } from "./AudioSettings";
 import { PluginBridgeSettings } from "./PluginBridgeSettings";
 import { HostSettings } from "./HostSettings";
@@ -22,6 +23,15 @@ export function ConfigView({ state, events, api }: Props) {
   const { t } = useLang();
   const [tab, setTab] = useState<ConfigTab>("channels");
 
+  // Reiterwechsel der Fuehrung (#22) — dieselbe Aufteilung wie in App: die
+  // Fuehrung nennt das Ziel, dieser Bereich schaltet seinen eigenen Zustand.
+  const fuehrung = useFuehrung();
+  useEffect(() => {
+    if (fuehrung.schritt?.reiter && fuehrung.schritt.reiter !== tab) {
+      setTab(fuehrung.schritt.reiter);
+    }
+  }, [fuehrung.schritt, tab]);
+
   const tabs: { id: ConfigTab; label: string }[] = [
     { id: "channels", label: t.tabChannelsRouting },
     { id: "devices", label: t.tabDevicesUsers },
@@ -36,6 +46,7 @@ export function ConfigView({ state, events, api }: Props) {
         {tabs.map((tb) => (
           <button
             key={tb.id}
+            data-fuehrung={`tab-${tb.id}`}
             className={`configTab ${tab === tb.id ? "active" : ""}`}
             onClick={() => setTab(tb.id)}
           >
