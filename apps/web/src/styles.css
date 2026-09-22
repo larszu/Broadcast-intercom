@@ -498,6 +498,19 @@ input[type="range"]:disabled {
 .phoneMicReleaseBtn:hover { background: rgba(224,82,96,0.18); border-color: var(--danger); }
 .phoneBanner { font-size: 12px; padding: 7px 10px; border-radius: 0; background: var(--bg3); }
 .phoneBanner.statusWarn { color: var(--warning); background: #1e1400; border: 1px solid rgba(244,162,97,0.2); }
+/* Der Weg zur HTTPS-Adresse (#23). Als Bedienpunkt behandelt und nicht als
+   Fliesstext-Link: er wird am Handy mit dem Finger getroffen, also gilt die
+   Hausnorm von 32 px aus der Bedienbarkeits-Sonde. */
+.phoneBannerLink {
+  display: inline-block;
+  min-height: var(--ziel, 32px);
+  line-height: var(--ziel, 32px);
+  padding: 0 10px;
+  margin-top: 4px;
+  color: var(--warning);
+  font-weight: 600;
+  text-decoration: underline;
+}
 .phoneAudioDetails { font-size: 12px; color: var(--text2); }
 .phoneAudioDetails > summary { cursor: pointer; padding: 4px 0; list-style: none; -webkit-user-select: none; user-select: none; color: var(--text2); }
 .phoneAudioDetails > summary::-webkit-details-marker { display: none; }

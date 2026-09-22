@@ -2,6 +2,7 @@ import cors from "cors";
 import AdmZip from "adm-zip";
 import express from "express";
 import { createServer } from "node:http";
+import { createServer as createTlsServer } from "node:https";
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { existsSync, readdirSync } from "node:fs";
@@ -11,6 +12,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { atomicWrite, bakPath, readWithBackup } from "./configStore.js";
+import { zertifikatBesorgen } from "./tls.js";
 import type {
 	AudioSettings,
 	BeltpackDevice,
@@ -47,6 +49,21 @@ import {
 } from "@broadcast/shared";
 
 const PORT = Number(process.env.PORT || 4001);
+/**
+ * Der HTTPS-Port (#23).
+ *
+ * Browser geben das Mikrofon nur in einem secure context frei — HTTPS oder
+ * `localhost`. Ein Beltpack auf einem Handy im WLAN ist weder das eine noch
+ * das andere, solange der Server nur Klartext spricht; deshalb stand die
+ * Meldung „Microphone access requires HTTPS" auf jedem Geraet ausser dem
+ * Server selbst.
+ *
+ * `INTERCOM_TLS=0` schaltet es ab — fuer Aufbauten, die bereits hinter einem
+ * eigenen Reverse-Proxy mit echtem Zertifikat stehen; dort waere ein zweiter,
+ * selbst ausgestellter Dienst nur ein zweiter Weg mit anderem Vertrauen.
+ */
+const TLS_PORT = Number(process.env.TLS_PORT || PORT + 442);
+const TLS_AKTIV = process.env.INTERCOM_TLS !== "0";
 const MOCK_MODE = process.env.MOCK_DEVICES === "1";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Datenverzeichnis (configs/, models/). Standard ist das repo-interne `data/`
@@ -1211,6 +1228,9 @@ app.get("/api/network/hosts", (_req, res) => {
 		ok: true,
 		hosts: getLanHosts(),
 		serverPort: PORT,
+		// Damit die Oberflaeche sagen kann, WOHIN man wechseln muss, wenn das
+		// Mikrofon gesperrt ist (#23) — statt nur, dass HTTPS noetig waere.
+		tlsPort: TLS_AKTIV ? TLS_PORT : null,
 	});
 });
 
@@ -1953,7 +1973,7 @@ async function initializeState(): Promise<void> {
 }
 
 initializeState()
-	.then(() => {
+	.then(async () => {
 		if (MOCK_MODE && Object.keys(state.devices).length === 0) {
 			startMockEnvironment();
 		}
@@ -1973,6 +1993,43 @@ initializeState()
 				res.sendFile(path.join(WEB_DIST, "index.html"));
 			});
 		}
+		// HTTPS zusaetzlich zu HTTP (#23). Der Klartext-Port bleibt: der
+		// Desktop-Client laeuft ueber `localhost` und braucht kein TLS, und ein
+		// Umschalten, das bestehende Aufbauten bricht, waere hier keine
+		// Verbesserung.
+		//
+		// Beide Server bekommen denselben WebSocket-Aufsatz. Ohne das waere die
+		// HTTPS-Seite eine Oberflaeche ohne Verbindung: die Seite laedt, das
+		// Mikrofon geht, und kein Ton kommt an.
+		let tlsHosts: string[] = [];
+		let tlsNeu = false;
+		if (TLS_AKTIV) {
+			try {
+				const tls = await zertifikatBesorgen(DATA_DIR, getLanHosts());
+				tlsHosts = tls.hosts;
+				tlsNeu = tls.neuErzeugt;
+				const tlsServer = createTlsServer({ key: tls.key, cert: tls.cert }, app);
+				wss.addListener("close", () => tlsServer.close());
+				tlsServer.on("upgrade", (req, socket, head) => {
+					const { url } = req;
+					if (!url || !url.startsWith("/ws")) {
+						socket.destroy();
+						return;
+					}
+					wss.handleUpgrade(req, socket as never, head, (ws) => {
+						wss.emit("connection", ws, req);
+					});
+				});
+				tlsServer.listen(TLS_PORT);
+			} catch (error) {
+				// Kein Grund, den ganzen Kern nicht zu starten: ohne TLS laeuft
+				// alles wie bisher, nur das Mikrofon bleibt auf fremden Geraeten
+				// gesperrt. Das gehoert gesagt, nicht verschwiegen.
+				console.error("TLS konnte nicht eingerichtet werden:", describeError(error));
+				console.error("Der Kern laeuft weiter ueber HTTP — auf anderen Geraeten bleibt das Mikrofon gesperrt.");
+			}
+		}
+
 		server.listen(PORT, () => {
 			// DIE ADRESSE, DIE MAN WEITERSAGEN KANN.
 			//
@@ -1998,6 +2055,26 @@ initializeState()
 			// die Liste sieht, erkennt seine eigene.
 			for (const host of getLanHosts()) {
 				console.log(`               http://${host}:${PORT}  (im selben Netz)`);
+			}
+
+			// DIE ADRESSE, UNTER DER DAS MIKROFON GEHT.
+			//
+			// Sie steht bewusst UNTER der Klartext-Liste und mit einem Satz
+			// dazu: wer die Adresse weitersagt, muss wissen, dass die
+			// Zertifikatswarnung beim ersten Aufruf dazugehoert und kein
+			// Fehler ist. Ohne diesen Satz klickt man sie weg und landet
+			// wieder auf HTTP.
+			if (TLS_AKTIV && tlsHosts.length > 0) {
+				console.log("");
+				console.log("Fuer Beltpacks auf Handy/Tablet — nur hier gibt der Browser das Mikrofon frei:");
+				for (const host of getLanHosts()) {
+					console.log(`               https://${host}:${TLS_PORT}`);
+				}
+				console.log("Beim ersten Aufruf warnt der Browser vor dem selbst ausgestellten");
+				console.log("Zertifikat. Das ist erwartet: \"Erweitert\" -> \"Weiter zu ...\". Einmal je Geraet.");
+				if (tlsNeu) {
+					console.log(`(Zertifikat neu erzeugt in ${DATA_DIR}, gueltig fuer: ${tlsHosts.join(", ")})`);
+				}
 			}
 		});
 	})

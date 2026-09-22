@@ -114,7 +114,10 @@ Broadcast-intercom/
 - Runtime: Node 20 (via [fnm](https://github.com/Schniz/fnm); `.node-version` pins 20)
 - Server: Express 4, `ws` WebSocket library, `tsx` for TypeScript execution
 - Frontend: React 19, Vite 6, CSS-only styling (no CSS framework)
-- HTTPS (optional): [mkcert](https://github.com/FiloSottile/mkcert) local CA — the dev server falls back to plain HTTP when no certificates are present
+- HTTPS: the core serves the same UI over TLS on port 4443 with a certificate it
+  generates itself on first start — browsers only unlock the microphone in a
+  secure context, so beltpacks on phones need this. [mkcert](https://github.com/FiloSottile/mkcert)
+  stays optional and only removes the one-time certificate warning.
 
 ---
 
@@ -141,7 +144,9 @@ cd Broadcast-intercom
 npm install
 ```
 
-**Optional — HTTPS certificates** (needed for microphone access from other devices on the LAN):
+**Optional — mkcert certificates.** The core already serves HTTPS on its own (see
+[Microphone on other devices](#microphone-on-other-devices)); mkcert only removes
+the one-time browser warning on devices where you install its local CA:
 
 ```bash
 cd apps/web
@@ -171,6 +176,38 @@ npm run dev:server     # server only (useful for headless testing / Companion)
 ```
 
 Open **http://localhost:5200** (or `https://` if you generated certificates).
+
+### Microphone on other devices
+
+On the machine running the core, `http://localhost:4001` is enough — browsers
+treat `localhost` as a secure context. **On every other device it is not.** A
+beltpack on a phone reaches the core at `http://192.168.x.y:4001`, and there the
+browser refuses the microphone outright:
+
+> Microphone access requires HTTPS.
+
+That is not a setting anyone can turn off. The core therefore serves the same UI
+a second time over TLS:
+
+```
+https://192.168.x.y:4443
+```
+
+The address is printed at startup next to the plain-HTTP ones. The certificate is
+generated on first start, covers every LAN address of the machine, and is stored
+next to the configurations. Since nobody signed it, the browser warns once per
+device — *Advanced → Proceed*. That is expected and is the price for a
+microphone that works at all.
+
+A certificate from Let's Encrypt is not an option here: issuance requires a
+publicly resolvable name, and an intercom rack in an OB van has no internet.
+Installing the mkcert CA on the devices (above) removes the warning; it does not
+change anything else.
+
+`INTERCOM_TLS=0` disables the TLS listener — for setups that already sit behind
+their own reverse proxy with a real certificate, where a second self-signed
+service would just be a second path with different trust. `TLS_PORT` moves the
+port.
 
 **No hardware needed.** `dev:mock` spawns simulated beltpacks that generate
 live traffic; the whole intercom — channels, calls, audio control, the plan
