@@ -169,7 +169,11 @@ const EN = {
   activeLabel: "Active",
   userLabel: "User",
   userUnassigned: "unassigned",
-  micErrorNoHTTPS: "Microphone access requires HTTPS. Please open this page over a secure connection.",
+  // Sagt den Weg, nicht nur das Hindernis (#23): der Server liefert dieselbe
+  // Oberflaeche zusaetzlich ueber HTTPS aus, und nur dort gibt der Browser das
+  // Mikrofon frei. Die alte Fassung nannte die Bedingung und liess offen, wie
+  // man sie erfuellt — an einer Anlage, die genau diese Adresse anbietet.
+  micErrorNoHTTPS: "The microphone stays locked on this address: browsers only allow it over HTTPS. Open the same page via https:// (port {tlsPort}) — the browser warns about the self-signed certificate once per device, which is expected.",
 
   // ── PTT Slider ─────────────────────────────────────────
   pttPushToTalk: "Push to Talk",
@@ -194,6 +198,9 @@ const EN = {
   wizardSkip: "Skip",
   wizardNext: "Next",
   wizardFinish: "Get started",
+  // Der Weg statt der Beschreibung (#22): fuehrt durch das Anlegen des ersten
+  // Benutzers. Ohne einen einzigen bleibt jedes Beltpack ohne Rechte.
+  wizardShowMe: "Show me: create the first user",
   wizardReopenTip: "You can reopen this guide anytime with the ? button.",
 
   // ── Host Settings ──────────────────────────────────────
@@ -374,7 +381,7 @@ const DE: typeof EN = {
   activeLabel: "Aktiv",
   userLabel: "Benutzer",
   userUnassigned: "nicht zugewiesen",
-  micErrorNoHTTPS: "Mikrofonzugriff erfordert HTTPS. Bitte \u00f6ffne diese Seite \u00fcber eine sichere Verbindung.",
+  micErrorNoHTTPS: "Auf dieser Adresse bleibt das Mikrofon gesperrt: Browser geben es nur \u00fcber HTTPS frei. \u00d6ffne dieselbe Seite \u00fcber https:// (Port {tlsPort}) \u2014 der Browser warnt dort einmal je Ger\u00e4t vor dem selbst ausgestellten Zertifikat, das geh\u00f6rt dazu.",
   pttPushToTalk: "Push to Talk",
   pttSlideLock: "\u2192 Einrasten",
   pttSlideToTalk: "Push to Talk",
@@ -392,6 +399,7 @@ const DE: typeof EN = {
   wizardSkip: "\u00dcberspringen",
   wizardNext: "Weiter",
   wizardFinish: "Los geht\u2019s",
+  wizardShowMe: "Zeig es mir: ersten Benutzer anlegen",
   wizardReopenTip: "Du kannst diesen Guide jederzeit mit dem ? Button erneut \u00f6ffnen.",
   settingsTitle: "Einstellungen",
   settingsLanguage: "Sprache",

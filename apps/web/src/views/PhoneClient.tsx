@@ -83,6 +83,35 @@ export function PhoneClient({ state, sendWs, connected, setAudioChunkHandler }: 
   const lastRegisteredKeyRef = useRef("");
   const isSecureContext = typeof window !== "undefined" && Boolean(window.isSecureContext);
 
+  /**
+   * Der HTTPS-Port des Kerns (#23).
+   *
+   * Der Hinweis „braucht HTTPS" nannte die Bedingung und liess offen, wie man
+   * sie erfuellt — an einer Anlage, die genau diese Adresse anbietet. Mit dem
+   * Port daneben wird aus der Feststellung ein Weg. Wird nur geholt, wenn die
+   * Seite unsicher ist; auf HTTPS oder localhost ist die Frage erledigt.
+   */
+  const [tlsPort, setTlsPort] = useState<number | null>(null);
+  useEffect(() => {
+    if (isSecureContext) return;
+    let abgebrochen = false;
+    fetch("/api/network/hosts")
+      .then((r) => r.json())
+      .then((d: { tlsPort?: number | null }) => {
+        if (!abgebrochen && typeof d?.tlsPort === "number") setTlsPort(d.tlsPort);
+      })
+      .catch(() => {
+        // Kein Port, kein Hinweis auf den Port — der Rest der Meldung steht
+        // trotzdem und ist wahr.
+      });
+    return () => { abgebrochen = true; };
+  }, [isSecureContext]);
+
+  /** Der fertige Satz, mit Port wenn bekannt und ohne Klammerrest wenn nicht. */
+  const httpsHinweis = tlsPort
+    ? t.micErrorNoHTTPS.replace("{tlsPort}", String(tlsPort))
+    : t.micErrorNoHTTPS.replace(/\s*\(Port \{tlsPort\}\)|\s*\(port \{tlsPort\}\)/, "");
+
   const outputSelectionSupported = typeof HTMLMediaElement !== "undefined"
     && "setSinkId" in HTMLMediaElement.prototype;
 
@@ -493,7 +522,20 @@ export function PhoneClient({ state, sendWs, connected, setAudioChunkHandler }: 
 
       <section className="phonePttSection">
         {!isSecureContext && (
-          <div className="phoneBanner statusWarn">{t.micErrorNoHTTPS}</div>
+          <div className="phoneBanner statusWarn">
+            {httpsHinweis}
+            {tlsPort && (
+              <>
+                {" "}
+                <a
+                  href={`https://${window.location.hostname}:${tlsPort}${window.location.pathname}${window.location.search}`}
+                  className="phoneBannerLink"
+                >
+                  Jetzt dorthin wechseln
+                </a>
+              </>
+            )}
+          </div>
         )}
         {micError && <div className="phoneBanner statusWarn">{micError}</div>}
 

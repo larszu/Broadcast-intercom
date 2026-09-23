@@ -498,6 +498,19 @@ input[type="range"]:disabled {
 .phoneMicReleaseBtn:hover { background: rgba(224,82,96,0.18); border-color: var(--danger); }
 .phoneBanner { font-size: 12px; padding: 7px 10px; border-radius: 0; background: var(--bg3); }
 .phoneBanner.statusWarn { color: var(--warning); background: #1e1400; border: 1px solid rgba(244,162,97,0.2); }
+/* Der Weg zur HTTPS-Adresse (#23). Als Bedienpunkt behandelt und nicht als
+   Fliesstext-Link: er wird am Handy mit dem Finger getroffen, also gilt die
+   Hausnorm von 32 px aus der Bedienbarkeits-Sonde. */
+.phoneBannerLink {
+  display: inline-block;
+  min-height: var(--ziel, 32px);
+  line-height: var(--ziel, 32px);
+  padding: 0 10px;
+  margin-top: 4px;
+  color: var(--warning);
+  font-weight: 600;
+  text-decoration: underline;
+}
 .phoneAudioDetails { font-size: 12px; color: var(--text2); }
 .phoneAudioDetails > summary { cursor: pointer; padding: 4px 0; list-style: none; -webkit-user-select: none; user-select: none; color: var(--text2); }
 .phoneAudioDetails > summary::-webkit-details-marker { display: none; }
@@ -1055,6 +1068,13 @@ input[type="range"]:disabled {
   transition: background 0.15s;
 }
 .fbEntryAdd:hover { background: var(--accent); color: var(--accent-text); }
+/* Der Weg IN ein Plugin-Buendel (#24) — bewusst leiser als "+ Hinzufuegen":
+   er ist die Ausnahme, das Hinzufuegen der Normalfall. */
+.fbEntryOpen {
+  flex-shrink: 0; font-size: 11px; color: var(--text-dim);
+  padding: 1px 7px; border: 1px solid transparent;
+}
+.fbEntryOpen:hover { color: var(--text); border-color: var(--bg3); }
 
 /* Plugin path list */
 .pluginPathList { display: flex; flex-direction: column; gap: 4px; width: 100%; }
@@ -1117,3 +1137,69 @@ textarea:focus-visible,
   outline: 2px solid var(--signal);
   outline-offset: 3px;
 }
+
+/* ── Fuehrung durch den ersten Start (#22) ─────────────────────────────
+   Der Ring liegt ueber der Oberflaeche und fasst sie nicht an: ein eigenes,
+   absolut positioniertes Element auf den Massen des Ziels. Haette der Glow
+   stattdessen eine Klasse am Zielelement gesetzt, wuerde er dessen Layout
+   verschieben und in jedem Bereich anders aussehen.
+
+   `pointer-events: none` ist der Punkt, an dem ein Scheinwerfer sonst zur
+   Falle wird: er soll zeigen, worauf man tippen muss — nicht den Tipp
+   abfangen. */
+.fuehrungRing {
+  position: fixed;
+  z-index: 9000;
+  pointer-events: none;
+  /* `outline` und nicht `box-shadow`: ADR-007 verbietet Schatten, und
+     brand-tokens-check.mjs misst das nach — der erste Entwurf zeichnete den
+     Ring aus zwei gestapelten Schatten mit 4px Rundung und machte den Lauf
+     rot. Ein Umriss taugt hier ohnehin besser: er liegt ausserhalb der
+     Masse des Elements und schiebt nichts, gerade weil er kein Rahmen ist. */
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  animation: fuehrungPuls 1.6s ease-in-out infinite;
+}
+
+/* Gepulst wird ueber die Deckkraft. Eine wachsende Umrissbreite waere das
+   naeherliegende Mittel, ruckelt aber: sie laeuft nicht auf der
+   Compositor-Ebene. */
+@keyframes fuehrungPuls {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+
+/* Wer diese Einstellung setzt, will keine pulsierenden Flaechen. Der Ring
+   bleibt — er ist die Information —, nur das Pulsieren geht. */
+@media (prefers-reduced-motion: reduce) {
+  .fuehrungRing { animation: none; }
+}
+
+.fuehrungBlase {
+  position: fixed;
+  z-index: 9001;
+  width: 320px;
+  max-width: calc(100vw - 24px);
+  padding: 14px 16px;
+  background: var(--bg2);
+  /* Abgehoben wird ueber den Rahmen, nicht ueber einen Schlagschatten
+     (ADR-007). Zwei Pixel in der Akzentfarbe trennen die Blase von der
+     Oberflaeche darunter deutlich genug -- sie liegt ohnehin neben dem
+     Ring, der dasselbe Signal traegt. */
+  border: 2px solid var(--accent);
+}
+
+.fuehrungZaehler {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.fuehrungTitel { margin: 4px 0 6px; font-size: 15px; }
+.fuehrungText { margin: 0 0 12px; font-size: 13px; color: var(--text-dim); line-height: 1.45; }
+
+.fuehrungFuss { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fuehrungNav { display: flex; gap: 6px; }
+/* Hausnorm 32 px: die Fuehrung laeuft auch auf dem Tablet im Regiewagen. */
+.fuehrungFuss button { min-height: var(--ziel, 32px); }
