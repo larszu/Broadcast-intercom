@@ -36,6 +36,8 @@ publishes by itself — nothing in this repo needs changing.
 - **Companion / Stream Deck control** — REST control endpoint plus a ready-to-use [Bitfocus Companion module](companion-module/) (`companion-module/`)
 - **Audio transcription** — optional Vosk speech-to-text per channel
 - **Plugin Bridge** — optional VST/audio plugin integration via WebSocket
+- **Device library** — sign in to [devices.zumpelars.de](https://devices.zumpelars.de) (Setup → Settings & Logs), sync shared intercom device types as a read-only source, submit your own with a datasheet link; the `intercom` facet format is documented in [docs/device-library.md](docs/device-library.md)
+- **Device types** — own and library types under Setup → Device types; *Add device* takes role and transports from the picked type
 - **Intercom plan import** — reads the vendor-neutral `avplan-intercom` file the AV Planner Suite exports: conferences, stations, and talk/listen kept apart. Merged by name, never deleting ([details](docs/plan-import.md))
 
 ---
@@ -261,6 +263,10 @@ Releases are built in CI: pushing a `v*` tag runs
 (no paid certificate), so first launch needs right-click → **Open**; Windows is
 unsigned (SmartScreen shows "unknown publisher").
 
+The desktop window gets a preload (`dist/preload.cjs`) with one bridge: the
+device library token, encrypted by the main process with Electron
+`safeStorage`. See [docs/device-library.md](docs/device-library.md).
+
 Configs and Vosk models are stored in the OS user-data directory when running as
 the packaged app (the app bundle itself is read-only); the core reads
 `INTERCOM_DATA_DIR` to find them.
@@ -278,6 +284,12 @@ npm run test:smoke          # terminal 2  (override target with BASE=http://host
 endpoint (PTT / mute / volume / emergency, including error paths), config
 persistence, and the WebSocket lifecycle (device registration, talk events,
 direct-call temporary channels).
+
+The device library connection is checked without a server or browser:
+
+```bash
+npm run library:check       # facet round trip, no project data, incremental sync, token handling
+```
 
 The Companion module has its own end-to-end test that drives the real module
 logic against a running core — see [`companion-module/`](companion-module/).

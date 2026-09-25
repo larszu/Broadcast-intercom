@@ -6,6 +6,7 @@
 | [`architecture.md`](architecture.md) | Design/vision draft: hardware model, transport model, audio phases, roadmap |
 | [`future-feature-requests.md`](future-feature-requests.md) | Backlog of planned features and ideas |
 | [`plan-import.md`](plan-import.md) | Reading an `avplan-intercom` plan from the AV Planner Suite: the two endpoints, and the rules the merge follows |
+| [`device-library.md`](device-library.md) | Device library (`devices.zumpelars.de`): sign-in, sync, submitting, and the `intercom` facet format |
 | [`../companion-module/README.md`](../companion-module/README.md) | Bitfocus Companion module — how it works, install, build, test |
 | [`../companion-module/companion/HELP.md`](../companion-module/companion/HELP.md) | Companion module reference: actions, feedbacks, variables, presets |
 

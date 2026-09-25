@@ -1,4 +1,5 @@
 import { useLang, type Lang } from "../i18n";
+import { DeviceLibrarySettings } from "./DeviceLibrarySettings";
 
 export function HostSettings() {
   const { t, lang, setLang } = useLang();
@@ -31,6 +32,7 @@ export function HostSettings() {
           </label>
         </div>
       </div>
+      <DeviceLibrarySettings />
     </div>
   );
 }

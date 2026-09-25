@@ -20,7 +20,7 @@ module.exports = {
 	// liegen als extraResources daneben (siehe unten) — der Kern, weil ein
 	// Kindprozess nicht aus dem asar geforkt werden kann; das UI, weil es der
 	// Kern von der Platte ausliefert.
-	files: ["dist/main.cjs", "package.json"],
+	files: ["dist/main.cjs", "dist/preload.cjs", "package.json"],
 	extraResources: [
 		{ from: "dist/server.cjs", to: "server.cjs" },
 		{ from: "../web/dist", to: "web" },

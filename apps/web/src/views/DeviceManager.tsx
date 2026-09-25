@@ -1,6 +1,9 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import type { BeltpackDevice, CoreState, TransportType } from "@broadcast/shared";
 import QRCode from "qrcode";
+import { useLang } from "../i18n";
+import { useDeviceLibrary } from "../lib/deviceLibrary/deviceLibraryStore";
+import { deviceRoleOf, type IntercomDeviceType } from "../lib/deviceLibrary/intercomDeviceType";
 
 interface Props {
   state: CoreState;
@@ -26,10 +29,30 @@ function AddDeviceForm({ state, api }: { state: CoreState; api: Props["api"] }) 
   const [label, setLabel] = useState("");
   const [transport, setTransport] = useState<TransportType>("ethernet");
   const [userId, setUserId] = useState("");
+  const [typeKey, setTypeKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const { t } = useLang();
+  const lib = useDeviceLibrary();
 
   const users = Object.values(state.users);
+
+  // Own types and the library copy side by side. Only kinds the core runs as
+  // a device (beltpack, station) are offered; antennas and interfaces are not
+  // a `BeltpackDevice`.
+  const types: { key: string; label: string; type: IntercomDeviceType }[] = [
+    ...lib.own.map((o) => ({ key: `own:${o.id}`, label: `${o.manufacturer} ${o.model}`, type: o })),
+    ...Object.values(lib.cache.entries).map((e) => ({ key: `lib:${e.slug}`, label: `${e.type.manufacturer} ${e.type.model} ↗`, type: e.type })),
+  ].filter((x) => deviceRoleOf(x.type.facet));
+  const picked = types.find((x) => x.key === typeKey)?.type;
+
+  function pickType(key: string) {
+    setTypeKey(key);
+    const type = types.find((x) => x.key === key)?.type;
+    if (!type) return;
+    if (!type.facet.transports.includes(transport)) setTransport(type.facet.transports[0]);
+    if (!label.trim()) setLabel(type.model);
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -42,9 +65,10 @@ function AddDeviceForm({ state, api }: { state: CoreState; api: Props["api"] }) 
         id: trimId,
         label: label.trim() || trimId,
         transport,
+        role: picked ? deviceRoleOf(picked.facet) ?? undefined : undefined,
         userId: userId || undefined,
       });
-      setId(""); setLabel(""); setTransport("ethernet"); setUserId("");
+      setId(""); setLabel(""); setTransport("ethernet"); setUserId(""); setTypeKey("");
       setOpen(false);
     } catch {
       setError("Fehler beim Hinzufügen.");
@@ -60,6 +84,15 @@ function AddDeviceForm({ state, api }: { state: CoreState; api: Props["api"] }) 
       ) : (
         <form className="dmAddForm" onSubmit={e => void submit(e)}>
           <h4 className="dmAddFormTitle">Neues Gerät</h4>
+          {types.length > 0 && (
+            <div className="dmEditRow">
+              <label>{t.dtPickType}</label>
+              <select className="textInput" value={typeKey} onChange={e => pickType(e.target.value)}>
+                <option value="">{t.dtPickNone}</option>
+                {types.map(x => <option key={x.key} value={x.key}>{x.label}</option>)}
+              </select>
+            </div>
+          )}
           <div className="dmEditRow">
             <label>Geräte-ID *</label>
             <input className="textInput" value={id} onChange={e => setId(e.target.value)} placeholder="z. B. bp-studio-1" />
@@ -71,7 +104,7 @@ function AddDeviceForm({ state, api }: { state: CoreState; api: Props["api"] }) 
           <div className="dmEditRow">
             <label>Transport</label>
             <select className="textInput" value={transport} onChange={e => setTransport(e.target.value as TransportType)}>
-              {TRANSPORTS.map(t => <option key={t} value={t}>{t}</option>)}
+              {(picked ? picked.facet.transports : TRANSPORTS).map(x => <option key={x} value={x}>{x}</option>)}
             </select>
           </div>
           <div className="dmEditRow">

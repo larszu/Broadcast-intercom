@@ -23,7 +23,8 @@
     "audio:check": "node scripts/audio-level-check.mjs",
     "plan:check": "node scripts/plan-contract-check.mjs",
     "audio:control": "node scripts/audio-control-check.mjs",
-    "slider:check": "node scripts/slider-groesse-check.mjs"
+    "slider:check": "node scripts/slider-groesse-check.mjs",
+    "library:check": "node scripts/device-library-check.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.2.0",

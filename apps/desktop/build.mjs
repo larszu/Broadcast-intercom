@@ -1,6 +1,7 @@
 // Baut die beiden JS-Buendel der Desktop-Huelle mit esbuild:
 //
 //   dist/main.cjs    — der Electron-Main-Prozess (src/main.ts)
+//   dist/preload.cjs — Preload des Fensters (src/preload.ts), Token-Bruecke
 //   dist/server.cjs  — der Intercom-Kern (apps/server/src/index.ts), inklusive
 //                      @broadcast/shared, express, ws, cors, adm-zip in EINER
 //                      Datei
@@ -39,7 +40,7 @@ const common = {
 // werden.
 await build({
 	...common,
-	entryPoints: { main: path.join(here, "src", "main.ts") },
+	entryPoints: { main: path.join(here, "src", "main.ts"), preload: path.join(here, "src", "preload.ts") },
 	outdir: dist,
 	external: ["electron"],
 });
@@ -66,4 +67,4 @@ await build({
 	banner: { js: "const __importMetaUrl = require('node:url').pathToFileURL(__filename).href;" },
 });
 
-console.log("desktop: main.cjs + server.cjs gebaut ->", dist);
+console.log("desktop: main.cjs + preload.cjs + server.cjs gebaut ->", dist);
