@@ -1203,3 +1203,30 @@ textarea:focus-visible,
 .fuehrungNav { display: flex; gap: 6px; }
 /* Hausnorm 32 px: die Fuehrung laeuft auch auf dem Tablet im Regiewagen. */
 .fuehrungFuss button { min-height: var(--ziel, 32px); }
+
+/* ── DEVICE LIBRARY + DEVICE TYPES ─────────────────────── */
+.libHint { color: var(--text2); font-size: 13px; margin: 0 0 12px; max-width: 72ch; }
+.libDim { color: var(--text2); font-size: 12px; font-style: normal; }
+.libRow { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end; margin-bottom: 12px; }
+.libField { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text2); min-width: 180px; }
+.libFieldWide { flex: 1 1 320px; }
+.libState { font-size: 13px; align-self: center; }
+.libError { color: var(--danger); font-size: 13px; margin: 0 0 12px; }
+.libLinks { display: flex; gap: 16px; font-size: 13px; }
+.libLinks a, .dtItem a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.dtForm { border-top: 1px solid var(--border); padding-top: 16px; margin-bottom: 16px; }
+.dtGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px 16px; margin-bottom: 16px; }
+.dtGrid .libFieldWide { grid-column: span 2; }
+.dtChecks { border: 0; padding: 0; margin: 0 0 12px; display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13px; }
+.dtChecks legend { font-size: 12px; color: var(--text2); margin-bottom: 6px; }
+.dtChecks label { display: inline-flex; align-items: center; gap: 6px; }
+.dtList { list-style: none; margin: 12px 0 0; padding: 0; }
+.dtItem { border-top: 1px solid var(--border); padding: 10px 0 0; margin-bottom: 10px; font-size: 13px; }
+.dtItemHead { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; margin-bottom: 8px; }
+.dtStatus { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+.dtStatus-verified { color: var(--success); }
+.dtStatus-confirmed { color: var(--text); }
+.dtStatus-unconfirmed { color: var(--text2); }
+.dtStatus-disputed { color: var(--warning); }
+.dtRejected summary { cursor: pointer; font-size: 13px; color: var(--text2); margin-top: 12px; }
+.dtItem .libRow { align-items: center; margin-bottom: 0; }

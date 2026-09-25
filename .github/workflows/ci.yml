@@ -109,6 +109,13 @@ jobs:
       - name: Lautstaerke und Stumm an ihrer Grenze
         run: npm run audio:control
 
+      # Die Geraetebibliothek (devices.zumpelars.de): Einreichen und Import
+      # lesen dasselbe Facet-Format, keine Projektdaten verlassen die Anlage,
+      # der Abgleich ist inkrementell, das Token wird nie geloggt. Ohne
+      # Vitest in diesem Repo ist das die einzige Pruefung der Anbindung.
+      - name: Geraetebibliothek haelt ihren Vertrag
+        run: npm run library:check
+
       - name: Kern starten
         run: |
           MOCK_DEVICES=1 node apps/server/dist/index.js > /tmp/intercom.log 2>&1 &

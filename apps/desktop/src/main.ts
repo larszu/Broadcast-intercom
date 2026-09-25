@@ -9,9 +9,9 @@
 // deshalb MUSS sie ueber HTTP von derselben Origin wie die API kommen — ein
 // `file://`-Fenster wuerde /api und /ws ins Leere laufen lassen. Andere Geraete
 // im selben Netz erreichen denselben Kern weiterhin ueber die LAN-Adresse.
-import { app, BrowserWindow, shell, utilityProcess, type UtilityProcess } from "electron";
+import { app, BrowserWindow, ipcMain, safeStorage, shell, utilityProcess, type UtilityProcess } from "electron";
 import path from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 
 const PORT = Number(process.env.PORT || 4001);
 const STARTUP_URL = `http://localhost:${PORT}`;
@@ -31,6 +31,40 @@ const webDist = app.isPackaged
 // Beschreibbares Datenverzeichnis. Das gepackte asar ist read-only, also
 // gehoeren configs/ und models/ in den userData-Pfad des Betriebssystems.
 const dataDir = path.join(app.getPath("userData"), "data");
+
+// Token der Geraetebibliothek (devices.zumpelars.de). Liegt nur
+// verschluesselt auf der Platte — `safeStorage` nimmt Schluesselbund bzw.
+// DPAPI. Bietet das System keine Verschluesselung an (Linux ohne
+// Schluesselring), wird NICHTS geschrieben: die Anmeldung haelt dann bis zum
+// Schliessen der App. Ein Klartext-Token auf der Platte waere schlimmer als
+// eine erneute Anmeldung. Nie geloggt.
+const tokenFile = path.join(app.getPath("userData"), "device-library-token.bin");
+
+// Nur das eigene Fenster darf fragen: es laedt die UI des Kerns von localhost.
+const vomFenster = (e: Electron.IpcMainInvokeEvent) => {
+	try {
+		return new URL(e.senderFrame?.url ?? "").origin === new URL(STARTUP_URL).origin;
+	} catch {
+		return false;
+	}
+};
+
+ipcMain.handle("device-library-token:get", (e) => {
+	if (!vomFenster(e) || !existsSync(tokenFile) || !safeStorage.isEncryptionAvailable()) return null;
+	try {
+		return safeStorage.decryptString(readFileSync(tokenFile));
+	} catch {
+		return null;
+	}
+});
+ipcMain.handle("device-library-token:set", (e, token: unknown) => {
+	if (!vomFenster(e) || typeof token !== "string" || !safeStorage.isEncryptionAvailable()) return false;
+	writeFileSync(tokenFile, safeStorage.encryptString(token), { mode: 0o600 });
+	return true;
+});
+ipcMain.handle("device-library-token:clear", (e) => {
+	if (vomFenster(e)) rmSync(tokenFile, { force: true });
+});
 
 let serverProc: UtilityProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -96,6 +130,8 @@ function createWindow(): void {
 		webPreferences: {
 			contextIsolation: true,
 			nodeIntegration: false,
+			sandbox: true,
+			preload: path.join(__dirname, "preload.cjs"),
 		},
 	});
 	// Links mit target=_blank (z. B. "Open Web Client") im System-Browser oeffnen,
