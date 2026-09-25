@@ -1230,3 +1230,4 @@ textarea:focus-visible,
 .dtStatus-disputed { color: var(--warning); }
 .dtRejected summary { cursor: pointer; font-size: 13px; color: var(--text2); margin-top: 12px; }
 .dtItem .libRow { align-items: center; margin-bottom: 0; }
+.libError a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }

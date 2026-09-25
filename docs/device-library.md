@@ -26,6 +26,12 @@ Reading the library needs an account. Accounts are created on the website
   enabled, a second step asks for the code from the authenticator app.
 - **Sign out** forgets the token, also when the library is not reachable.
 
+Every error code of the client has its own message. Two need action on the
+website: *guidelines outdated* (the community guidelines changed — the message
+links to `<server>/guidelines` to accept them again) and, when submitting,
+*already in the library* (HTTP 409 — confirm or correct the existing entry
+there instead of submitting a second one).
+
 The token is kept per operator UI, never in a show config and never sent to the
 intercom core:
 
@@ -106,5 +112,5 @@ system.
 `npm run library:check` (in CI): release default, address rules, facet round
 trip, project fields kept out, version/kind/transport refused by meaning,
 incremental sync with `removed` and refused entries, cache bound to its server,
-the proposal on the wire, no logging of the token, `safeStorage` in the desktop
+the proposal on the wire, the library's error codes (each with a text in both languages), no logging of the token, `safeStorage` in the desktop
 app.

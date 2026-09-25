@@ -149,6 +149,27 @@ check('Facet liegt unter planners.intercom', JSON.stringify(body.data.planners.i
 check('Datenblattlink geht mit', body.data.sourceUrl === eigen.sourceUrl)
 check('Token nur im Header, nie im Koerper', gesendet.init.headers.authorization === 'Bearer geheim' && !gesendet.init.body.includes('geheim'))
 
+console.log('Fehlercodes der Bibliothek')
+const antwortMit = (status, body) => { globalThis.fetch = async () => new Response(JSON.stringify(body), { status }) }
+const codeVon = async () => { try { await client.sync(S, 't', 'intercom', 0); return 'kein Fehler' } catch (e) { return e.code } }
+antwortMit(403, { error: 'guidelines-outdated' })
+check('Richtlinien neu annehmen wird erkannt', (await codeVon()) === 'guidelines-outdated')
+antwortMit(403, { code: 'email-not-verified' })
+check('kleingeschriebenes email-not-verified wird erkannt', (await codeVon()) === 'email-not-verified')
+antwortMit(409, { error: 'exists' })
+check('409 heisst: gibt es schon', await (async () => {
+	try { await client.propose(S, 't', 'intercom', { manufacturer: 'A', model: 'B', category: 'Intercom', sourceUrl: 'https://a.example' }, facet); return false } catch (e) { return e.code === 'exists' }
+})())
+const codes = [...lies(`${LIB}/deviceLibraryClient.ts`).match(/export type LibraryErrorCode =([\s\S]*?)\n\n/)[1].matchAll(/\| '([a-z-]+)'/g)].map((m) => m[1])
+const texte = lies('apps/web/src/views/DeviceLibrarySettings.tsx')
+const ohneText = codes.filter((c) => !texte.includes(`case "${c}"`))
+check(`jeder der ${codes.length} Fehlercodes hat einen Text`, codes.length >= 9 && ohneText.length === 0, ohneText.join(', '))
+check('Richtlinien-Fehler verlinkt /guidelines', texte.includes('/guidelines') && texte.includes('error === "guidelines-outdated"'))
+const i18n = lies('apps/web/src/i18n.tsx')
+for (const k of ['libErrGuidelinesOutdated', 'libErrGuidelinesLink', 'libErrExists']) {
+	check(`${k} auf Englisch und Deutsch`, i18n.split(`${k}:`).length === 3)
+}
+
 console.log('Quelltext')
 const kopie = lies(`${LIB}/deviceLibraryClient.ts`)
 check('Client ist die Kopie aus av-device-library', kopie.startsWith('// ───') && kopie.includes('Quelle: larszu/av-device-library, `clients/deviceLibraryClient.ts`'))

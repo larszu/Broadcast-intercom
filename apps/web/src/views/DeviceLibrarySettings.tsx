@@ -7,6 +7,8 @@ export function libraryErrorText(t: Strings, error: LibraryState["error"]): stri
   switch (error) {
     case "wrong-credentials": return t.libErrWrongCredentials;
     case "email-not-verified": return t.libErrEmailNotVerified;
+    case "guidelines-outdated": return t.libErrGuidelinesOutdated;
+    case "exists": return t.libErrExists;
     case "wrong-code": return t.libErrWrongCode;
     case "rate-limited": return t.libErrRateLimited;
     case "not-signed-in": return t.libErrNotSignedIn;
@@ -14,8 +16,30 @@ export function libraryErrorText(t: Strings, error: LibraryState["error"]): stri
     case "server": return t.libErrServer;
     case "invalid-url": return t.libErrInvalidUrl;
     case "insecure-url": return t.libErrInsecureUrl;
-    default: return "";
+    case null: return "";
+    default: {
+      // A new code in the client without a text here fails the build.
+      const missing: never = error;
+      return missing;
+    }
   }
+}
+
+export const guidelinesUrl = (server: string) => `${server.replace(/\/+$/, "")}/guidelines`;
+
+/** Error line; for outdated guidelines with the link to accept them again. */
+export function LibraryErrorMessage({ error, server }: { error: LibraryState["error"]; server: string }) {
+  const { t } = useLang();
+  const text = libraryErrorText(t, error);
+  if (!text) return null;
+  return (
+    <p className="libError" role="alert">
+      {text}
+      {error === "guidelines-outdated" && (
+        <> <a href={guidelinesUrl(server)} target="_blank" rel="noreferrer">{t.libErrGuidelinesLink}</a></>
+      )}
+    </p>
+  );
 }
 
 export function DeviceLibrarySettings() {
@@ -98,7 +122,7 @@ export function DeviceLibrarySettings() {
       {lib.phase === "signed-in" && lib.tokenSessionOnly && <p className="libHint">{t.libSessionOnly}</p>}
       {lib.phase === "signed-out" && !error && <p className="libHint">{t.libSignedOut}</p>}
 
-      {error && <p className="libError" role="alert">{error}</p>}
+      <LibraryErrorMessage error={lib.error} server={lib.server} />
 
       <div className="libLinks">
         <a href={registerUrl(lib.server)} target="_blank" rel="noreferrer">{t.libRegister}</a>

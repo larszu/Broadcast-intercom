@@ -16,7 +16,8 @@ import {
   type IntercomDeviceTypeFacet,
 } from "../lib/deviceLibrary/intercomDeviceType";
 import type { LibraryEntry } from "../lib/deviceLibrary/librarySync";
-import { libraryErrorText } from "./DeviceLibrarySettings";
+import { LibraryErrorMessage } from "./DeviceLibrarySettings";
+import type { LibraryState } from "../lib/deviceLibrary/deviceLibraryStore";
 
 export const kindLabel = (t: Strings, k: DeviceKind): string =>
   ({ beltpack: t.dtKindBeltpack, deskstation: t.dtKindDeskstation, antenna: t.dtKindAntenna, interface: t.dtKindInterface })[k];
@@ -135,6 +136,7 @@ function OwnRow({ type, onEdit }: { type: OwnDeviceType; onEdit: () => void }) {
   const { t } = useLang();
   const lib = useDeviceLibrary();
   const [note, setNote] = useState("");
+  const [failure, setFailure] = useState<LibraryState["error"]>(null);
   const [sending, setSending] = useState(false);
 
   async function propose() {
@@ -142,11 +144,13 @@ function OwnRow({ type, onEdit }: { type: OwnDeviceType; onEdit: () => void }) {
     if (lib.phase !== "signed-in") { setNote(t.dtProposeNeedsSignIn); return; }
     setSending(true);
     setNote("");
+    setFailure(null);
     try {
       await actions.propose(type);
       setNote(t.dtProposed);
     } catch (e) {
-      setNote(e instanceof LibraryError ? libraryErrorText(t, e.code) || e.message : String((e as Error).message ?? e));
+      if (e instanceof LibraryError) setFailure(e.code);
+      else setNote(String((e as Error).message ?? e));
     } finally {
       setSending(false);
     }
@@ -164,6 +168,7 @@ function OwnRow({ type, onEdit }: { type: OwnDeviceType; onEdit: () => void }) {
         <button type="button" className="btnSmall danger" onClick={() => actions.deleteOwn(type.id)}>{t.dtDelete}</button>
       </div>
       {note && <p className="libHint">{note}</p>}
+      <LibraryErrorMessage error={failure} server={lib.server} />
     </li>
   );
 }
@@ -207,7 +212,7 @@ export function DeviceTypesView() {
           {lib.cache.syncedAt && <span className="libDim">{t.dtSyncedAt}: {new Date(lib.cache.syncedAt).toLocaleString()}</span>}
         </div>
         {lib.phase !== "signed-in" && <p className="libHint">{t.dtLibrarySignIn}</p>}
-        {lib.error && <p className="libError" role="alert">{libraryErrorText(t, lib.error)}</p>}
+        <LibraryErrorMessage error={lib.error} server={lib.server} />
         {entries.length === 0 ? <p className="emptyHint">{t.dtLibraryEmpty}</p> : (
           <ul className="dtList">
             {entries.map((e) => (
