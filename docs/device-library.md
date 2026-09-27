@@ -46,9 +46,8 @@ intercom core:
 
 - **Own device types** — created and edited here, stored in the browser
   (`localStorage`), and uploaded to the library (`POST /api/upload`). Each type
-  shows its upload state: not uploaded yet, changed since upload, submitted
-  (awaiting moderation), submitted as next version, open submission updated,
-  live in the library, in sync, blocked, failed — with a link to its library
+  shows its upload state: not uploaded yet, changed since upload, awaiting
+  moderation, live in the library, blocked, failed — with a link to its library
   page once it has one.
 - **From the device library** — read-only. **Sync now** first uploads new and
   changed own types, then fetches everything after the last known `latestSeq`; entries marked `removed` disappear, the copy is
@@ -70,7 +69,9 @@ instead of a duplicate. Uploads are moderated unless the account is an admin.
   by default and acts while signed in: at start, after signing in, and two
   seconds after the last edit.
 - What was sent is remembered as a hash of core + facet. An unchanged type is
-  not sent again; an edited one is. A failed upload is retried; a blocked one
+  not sent again; an edited one is. A type still awaiting moderation is sent
+  again unchanged on every automatic run: the answer carries the moderation
+  state, and that is how *awaiting moderation* turns into *live*. A failed upload is retried; a blocked one
   only after an edit, because the library would block the same data again.
 - A type without a datasheet link is not sent — the library blocks devices
   nobody can look up — and shows why.

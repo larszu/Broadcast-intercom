@@ -5,7 +5,8 @@
 // in canonical key order). A type whose hash matches the last accepted upload
 // is not sent again; an edit changes the hash and sends it. Failed uploads are
 // retried, blocked ones only after an edit — the library would block the same
-// data again.
+// data again. A type still waiting for moderation is sent again unchanged: the
+// answer carries `moderation`, and that is how "pending" turns into "live".
 import type { UploadItem, UploadResult, UploadState } from "./deviceLibraryClient.ts";
 import { toFacet, type IntercomDeviceType } from "./intercomDeviceType.ts";
 
@@ -13,6 +14,8 @@ export interface UploadRecord {
   hash: string;
   state: UploadState;
   slug?: string;
+  /** Moderation state from the library; answered even for `in-sync`. */
+  moderation?: "pending" | "approved";
   /** Why it failed or was blocked; `no-source` is decided locally. */
   error?: string;
   findings?: string[];
@@ -75,6 +78,11 @@ export function uploadItemOf(type: OwnType): UploadItem {
 }
 
 const DONE: UploadState[] = ["created", "edit-proposed", "pending-updated", "approved", "in-sync", "blocked"];
+const AWAITING: UploadState[] = ["created", "edit-proposed", "pending-updated"];
+
+/** Still waiting for a moderator? Records from before `moderation` existed count by their state. */
+export const awaitsModeration = (rec: UploadRecord): boolean =>
+  rec.moderation ? rec.moderation === "pending" : AWAITING.includes(rec.state);
 
 export interface UploadPlan {
   items: UploadItem[];
@@ -95,7 +103,7 @@ export function planUpload(own: OwnType[], ledger: UploadLedger, now = new Date(
     }
     const hash = hashOf(item);
     const rec = ledger.records[t.id];
-    if (rec && rec.hash === hash && DONE.includes(rec.state)) continue;
+    if (rec && rec.hash === hash && DONE.includes(rec.state) && !awaitsModeration(rec)) continue;
     if (!item.core.sourceUrl) {
       // The library blocks a device nobody can look up; say so without a request.
       plan.local[t.id] = { hash, state: "blocked", error: "no-source", at: now.toISOString() };
@@ -118,7 +126,7 @@ export function applyUpload(ledger: UploadLedger, plan: UploadPlan, results: Upl
   for (const item of plan.items) {
     const r = byId.get(item.localId);
     records[item.localId] = r
-      ? { hash: plan.hashes[item.localId], state: r.state, slug: r.slug, error: r.error, findings: findingKinds(r.findings), at }
+      ? { hash: plan.hashes[item.localId], state: r.state, slug: r.slug, moderation: r.moderation, error: r.error, findings: findingKinds(r.findings), at }
       : { hash: plan.hashes[item.localId], state: "error", error: "no-result", at };
   }
   return { server: ledger.server, records };
@@ -130,15 +138,19 @@ export function pruneLedger(ledger: UploadLedger, ownIds: string[]): UploadLedge
   return { server: ledger.server, records: Object.fromEntries(Object.entries(ledger.records).filter(([id]) => keep.has(id))) };
 }
 
-/** Local view for one type: the stored state, or that it changed since. */
-export function uploadStatus(type: OwnType, ledger: UploadLedger): UploadState | "changed" | "never" {
+export type UploadView = "never" | "changed" | "pending" | "live" | "in-sync" | "blocked" | "error";
+
+/** What the list shows for one type: edited since, waiting for moderation, or live. */
+export function uploadStatus(type: OwnType, ledger: UploadLedger): UploadView {
   const rec = ledger.records[type.id];
   if (!rec) return "never";
-  let hash = "";
+  if (rec.state === "blocked" || rec.state === "error") return rec.state;
   try {
-    hash = hashOf(uploadItemOf(type));
+    if (rec.hash && rec.hash !== hashOf(uploadItemOf(type))) return "changed";
   } catch {
-    return rec.state;
+    return "error";
   }
-  return rec.hash && rec.hash !== hash ? "changed" : rec.state;
+  if (rec.moderation === "approved" || rec.state === "approved") return "live";
+  if (awaitsModeration(rec)) return "pending";
+  return "in-sync";
 }
