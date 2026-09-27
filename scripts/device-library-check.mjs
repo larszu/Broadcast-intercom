@@ -39,6 +39,7 @@ const lies = (p) => readFileSync(join(ROOT, p), 'utf8')
 const client = await import(`../${LIB}/deviceLibraryClient.ts`)
 const typ = await import(`../${LIB}/intercomDeviceType.ts`)
 const abgleich = await import(`../${LIB}/librarySync.ts`)
+const hoch = await import(`../${LIB}/libraryUpload.ts`)
 
 let pass = 0
 let fail = 0
@@ -169,6 +170,54 @@ const i18n = lies('apps/web/src/i18n.tsx')
 for (const k of ['libErrGuidelinesOutdated', 'libErrGuidelinesLink', 'libErrExists']) {
 	check(`${k} auf Englisch und Deutsch`, i18n.split(`${k}:`).length === 3)
 }
+
+console.log('Hochladen eigener Geraetetypen')
+const eigenerTyp = (id, extra = {}) => ({ id, manufacturer: 'Acme', model: `BP-${id}`, sourceUrl: 'https://acme.example/bp.pdf', facet: beltpack(), ...extra })
+check('Hash haengt nicht an der Schluesselreihenfolge', hoch.hashOf({ a: 1, b: { c: 2, d: 3 } }) === hoch.hashOf({ b: { d: 3, c: 2 }, a: 1 }))
+let buch = hoch.emptyLedger(S)
+const typen = [eigenerTyp('1'), eigenerTyp('2'), eigenerTyp('ohne', { sourceUrl: '' }), eigenerTyp('kaputt', { facet: { format: 'x' } })]
+let plan = hoch.planUpload(typen, buch)
+check('neue Typen gehen hoch', plan.items.map((i) => i.localId).join() === '1,2')
+check('Upload-Eintrag traegt Kategorie Intercom und das Facet', plan.items[0].core.category === 'Intercom' && plan.items[0].facet.format === typ.DEVICE_TYPE_FORMAT)
+check('ohne Datenblatt: lokal blockiert, keine Anfrage', plan.local.ohne?.state === 'blocked' && plan.local.ohne?.error === 'no-source')
+check('ungueltiges Facet verlaesst den Planner nicht', plan.local.kaputt?.state === 'error')
+buch = hoch.applyUpload(buch, plan, [{ localId: '1', state: 'in-sync', slug: 'acme-bp-1' }])
+check('Antwort wird je Typ gemerkt', buch.records['1'].state === 'in-sync' && buch.records['1'].slug === 'acme-bp-1')
+check('ohne Antwort zaehlt als fehlgeschlagen', buch.records['2'].state === 'error')
+plan = hoch.planUpload(typen, buch)
+check('unveraendert = nicht erneut, fehlgeschlagen = erneut', plan.items.map((i) => i.localId).join() === '2')
+check('blockiert ohne Aenderung wird nicht wiederholt', !plan.items.some((i) => i.localId === 'ohne') && !plan.local.ohne)
+const geaendert = eigenerTyp('1', { facet: { ...beltpack(), keys: { pages: 3, perPage: 4 } } })
+check('Aenderung wird erkannt', hoch.uploadStatus(geaendert, buch) === 'changed')
+check('geaenderter Typ geht erneut hoch', hoch.planUpload([geaendert], buch).items.length === 1)
+check('Serverwechsel verwirft die Upload-Staende', Object.keys(hoch.ledgerFor(JSON.parse(JSON.stringify(buch)), 'https://andere.example').records).length === 0)
+check('geloeschter Typ verliert nur seinen Eintrag', Object.keys(hoch.pruneLedger(buch, ['1']).records).join() === '1')
+
+const anfragen = []
+globalThis.fetch = async (url, init) => {
+	const b = JSON.parse(init.body)
+	anfragen.push({ url, init, b })
+	return new Response(JSON.stringify({ planner: b.planner, results: b.items.map((i) => ({ localId: i.localId, state: 'created', slug: `s-${i.localId}` })) }), { status: 200 })
+}
+const viele = Array.from({ length: 150 }, (_, i) => hoch.uploadItemOf(eigenerTyp(String(i))))
+const ergebnisse = await client.upload(S, 'geheim', 'intercom', viele)
+check('geht an /api/upload als intercom', anfragen[0].url === `${S}/api/upload` && anfragen[0].b.planner === 'intercom')
+check('150 Eintraege = zwei Anfragen (hoechstens 100)', anfragen.length === 2 && anfragen[0].b.items.length === 100)
+check('jedes Ergebnis kommt zurueck', ergebnisse.length === 150)
+check('Upload: Token nur im Header', anfragen.every((a) => a.init.headers.authorization === 'Bearer geheim' && !a.init.body.includes('geheim')))
+
+console.log('Automatik')
+const speicher = lies(`${LIB}/deviceLibraryStore.ts`)
+check('automatisches Hochladen ist ab Werk an', speicher.includes('autoUpload: read(KEY_AUTO) !== "0"'))
+const sofort = speicher.slice(speicher.indexOf('async syncNow()'))
+check('Jetzt synchronisieren: erst hoch, dann runter', sofort.indexOf('actions.upload()') > 0 && sofort.indexOf('actions.upload()') < sofort.indexOf('actions.sync()'))
+check('Aenderungen werden entprellt hochgeladen', /saveOwn[\s\S]*?scheduleAuto\(\)/.test(speicher) && speicher.includes('AUTO_DELAY_MS'))
+check('beim Start und nach der Anmeldung laeuft die Automatik', (speicher.match(/actions\.syncAuto\(\)/g) ?? []).length >= 2)
+
+console.log('Geraeteverwaltung ist uebersetzt')
+const dm = lies('apps/web/src/views/DeviceManager.tsx')
+const deutsch = dm.split('\n').filter((z) => !z.trim().startsWith('//') && /[äöüÄÖÜß]|\b(Gerät|Benutzer|Entfernen|Bearbeiten|Speichern|Abbrechen|Kopieren|Sprechen)\b/.test(z))
+check('keine hart kodierten deutschen Texte in DeviceManager', deutsch.length === 0, deutsch.join(' | '))
 
 console.log('Quelltext')
 const kopie = lies(`${LIB}/deviceLibraryClient.ts`)

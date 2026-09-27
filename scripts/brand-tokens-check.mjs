@@ -64,4 +64,12 @@ const unlesbar = css
   .filter((z) => z.includes('var(--accent)') && /color:\s*#fff/i.test(z));
 assert.deepEqual(unlesbar, [], `Weiss auf Off-White: ${unlesbar.join(' | ')}`);
 
+// Dieselbe Regel je Block, nicht je Zeile: `.btnPrimary` trug Hintergrund
+// und Schrift in zwei Zeilen und fiel deshalb durch die Zeilenpruefung —
+// „Hinzufuegen" stand weiss auf Off-White, gemessen 2026-09-27.
+const unlesbareBloecke = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+  .filter(([, , rumpf]) => /background:\s*var\(--accent\)/.test(rumpf) && /(^|;|\s)color:\s*(#fff\b|#ffffff\b|white\b)/i.test(rumpf))
+  .map(([, sel]) => sel.trim());
+assert.deepEqual(unlesbareBloecke, [], `Weiss auf Off-White (Block): ${unlesbareBloecke.join(' | ')}`);
+
 console.log('brand:check ok — Oberflaechen-Regeln (ADR-007) eingehalten');
