@@ -42,6 +42,8 @@ export function PhoneClient({ state, sendWs, connected, setAudioChunkHandler }: 
   const forcedLabel = searchParams.get("label")?.trim() || "";
   const forcedUserId = searchParams.get("userId")?.trim() || "";
   const clientId = useRef(forcedClientId || localStorage.getItem("webClientId") || `web-${Math.random().toString(36).slice(2, 8)}`);
+  // Der Name, den das Geraet ohne Eingabe bekommt — ein Datum, keine Oberflaeche.
+  const standardName = `Web Client ${clientId.current.slice(-4)}`;
 
   // Setup screen state
   const [setupDone, setSetupDone] = useState(
@@ -444,7 +446,7 @@ export function PhoneClient({ state, sendWs, connected, setAudioChunkHandler }: 
             <input
               className="phoneSetupInput"
               type="text"
-              placeholder={`Web Client ${clientId.current.slice(-4)}`}
+              placeholder={standardName}
               value={setupName}
               onChange={(e) => setSetupName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSetupConfirm()}
@@ -567,7 +569,7 @@ export function PhoneClient({ state, sendWs, connected, setAudioChunkHandler }: 
 
         {audioDevices.length > 0 && (
           <details className="phoneAudioDetails">
-            <summary>Audio</summary>
+            <summary>{t.softMicSection}</summary>
             <div className="deviceSelects">
               <label>{t.audioInput}
                 <select value={inputDevice} onChange={(event) => { void handleInputDeviceChange(event.target.value); }}>

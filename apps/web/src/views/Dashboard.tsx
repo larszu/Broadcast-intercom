@@ -1,4 +1,5 @@
 import type { BeltpackDevice, CoreState, EventItem } from "@broadcast/shared";
+import { useLang } from "../i18n";
 
 interface Props {
   state: CoreState;
@@ -12,13 +13,14 @@ function battery(pct: number) {
 }
 
 export function Dashboard({ state, events }: Props) {
+  const { t } = useLang();
   const devices = Object.values(state.devices) as BeltpackDevice[];
   const now = Date.now();
 
   return (
     <div className="viewPanel dashboardPanel">
       <div className="dashLeft">
-        <h2>Device Status</h2>
+        <h2>{t.dashDeviceStatus}</h2>
         <div className="deviceCards">
           {devices.map((d) => {
             const online = d.lastSeenAt && now - d.lastSeenAt < 8000;
@@ -27,23 +29,23 @@ export function Dashboard({ state, events }: Props) {
                 <div className="deviceCardHeader">
                   <span className={`badge ${d.transport}`}>{d.transport.toUpperCase()}</span>
                   <strong>{d.label}</strong>
-                  <span className={`onlineBadge ${online ? "on" : "off"}`}>{online ? "Online" : "Offline"}</span>
+                  <span className={`onlineBadge ${online ? "on" : "off"}`}>{online ? t.dashOnline : t.dashOffline}</span>
                 </div>
                 {d.battery && (
                   <div className="statRow">
-                    {battery(d.battery.percent)} Battery {d.battery.percent}%
-                    {d.battery.charging && <span> ⚡ Charging</span>}
+                    {battery(d.battery.percent)} {t.dashBattery} {d.battery.percent}%
+                    {d.battery.charging && <span> ⚡ {t.dashCharging}</span>}
                   </div>
                 )}
                 {d.network && (
                   <div className="statRow">
-                    📡 Signal {d.network.signal ?? "—"}%
+                    📡 {t.dashSignal} {d.network.signal ?? "—"}%
                     {d.network.ip && <span> · {d.network.ip}</span>}
                   </div>
                 )}
                 <div className="talkListen">
                   <span>
-                    👤 {d.userId ? (state.users[d.userId]?.name || d.userId) : "Unassigned"}
+                    👤 {d.userId ? (state.users[d.userId]?.name || d.userId) : t.dashUnassigned}
                   </span>
                   <span className={d.talkChannelId ? "talking" : ""}>
                     🎙 {d.talkChannelId ? (state.channels[d.talkChannelId]?.name || d.talkChannelId) : "—"}
@@ -55,12 +57,12 @@ export function Dashboard({ state, events }: Props) {
               </div>
             );
           })}
-          {devices.length === 0 && <p>No devices connected.</p>}
+          {devices.length === 0 && <p>{t.dashNoDevices}</p>}
         </div>
       </div>
 
       <div className="dashRight">
-        <h2>Event Log</h2>
+        <h2>{t.dashEventLog}</h2>
         <div className="eventLog">
           {events.map((e) => (
             <div key={e.id} className="eventItem">
@@ -69,7 +71,7 @@ export function Dashboard({ state, events }: Props) {
               <span>{e.message}</span>
             </div>
           ))}
-          {events.length === 0 && <p>No events yet.</p>}
+          {events.length === 0 && <p>{t.dashNoEvents}</p>}
         </div>
       </div>
     </div>
