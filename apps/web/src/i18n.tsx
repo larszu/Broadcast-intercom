@@ -476,6 +476,12 @@ const EN = {
   transcriptInstalling: "Installing…",
   transcriptChatEmpty: "No transcripts yet.",
   transcriptChatPlaceholder: "Awaiting speech…",
+  transcriptBookmarkPlaceholder: "Bookmark note, e.g. cue 34 late",
+  transcriptBookmarkBtn: "Add bookmark",
+  transcriptBookmarkLabel: "Bookmark",
+  transcriptExport: "Export",
+  transcriptClear: "Clear transcript",
+  transcriptClearConfirm: "Clear the transcript and start a new session? Files already exported are not affected.",
 
   // ── Web client modal ────────────────────────────────────
   wcModalTitle: "Web Client Access",
@@ -931,6 +937,12 @@ const DE: typeof EN = {
   transcriptInstalling: "Wird installiert…",
   transcriptChatEmpty: "Noch keine Transkripte.",
   transcriptChatPlaceholder: "Warte auf Sprache…",
+  transcriptBookmarkPlaceholder: "Notiz zur Marke, z. B. Cue 34 zu spät",
+  transcriptBookmarkBtn: "Marke setzen",
+  transcriptBookmarkLabel: "Marke",
+  transcriptExport: "Exportieren",
+  transcriptClear: "Transkript leeren",
+  transcriptClearConfirm: "Transkript leeren und eine neue Sitzung beginnen? Bereits exportierte Dateien bleiben unberührt.",
 
   // ── Web client modal ────────────────────────────────────
   wcModalTitle: "Webclient-Zugang",

@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { atomicWrite, bakPath, readWithBackup } from "./configStore.js";
 import { zertifikatBesorgen } from "./tls.js";
+import { TRANSCRIPT_FORMATS, TranscriptLog, type TranscriptFormat } from "./transcriptLog.js";
 import type {
 	AudioSettings,
 	BeltpackDevice,
@@ -781,6 +782,7 @@ function relayAudioChunk(senderDeviceId: string, channelId: string, sampleRate: 
 }
 
 let voskWarningEmitted = false;
+const transcriptLog = new TranscriptLog();
 
 function handleTranscriptionAudio(payload: Extract<ClientMessage, { type: "transcribe_audio" }>["payload"]): void {
 	const device = ensureDevice(payload.id);
@@ -833,6 +835,7 @@ function handleTranscriptionAudio(payload: Extract<ClientMessage, { type: "trans
 		}
 
 		const channelName = state.channels[payload.channelId]?.name || payload.channelId;
+		transcriptLog.add({ id: randomUUID(), ts: now(), kind: "line", channelId: payload.channelId, channelName, sender: device.label, text });
 		emitEvent("transcript", `[${channelName}] ${device.label}: ${text}`);
 	} catch {
 		emitEvent("system", `Transcription error on ${device.label}/${payload.channelId}`);
@@ -1221,6 +1224,38 @@ app.get("/api/transcription/status", (_req, res) => {
 		disabledReason: voskRuntime.disabledReason || null,
 		defaultModelUrl: DEFAULT_MODEL_URL,
 	});
+});
+
+app.get("/api/transcript", (req, res) => {
+	const channelId = typeof req.query.channel === "string" && req.query.channel ? req.query.channel : undefined;
+	const entries = transcriptLog.list(channelId);
+	const format = typeof req.query.format === "string" ? req.query.format : "";
+	if (!format) {
+		res.json({ ok: true, entries });
+		return;
+	}
+	const out = TRANSCRIPT_FORMATS[format as TranscriptFormat];
+	if (!out) {
+		res.status(400).json({ ok: false, error: `Unknown format "${format}" (json, txt, srt)` });
+		return;
+	}
+	const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+	res.setHeader("Content-Type", out.type);
+	res.setHeader("Content-Disposition", `attachment; filename="transcript-${stamp}.${format}"`);
+	res.send(out.render(entries));
+});
+
+app.post("/api/transcript/bookmark", (req, res) => {
+	const note = String(req.body?.note ?? "").trim().slice(0, 500);
+	const entry = transcriptLog.add({ id: randomUUID(), ts: now(), kind: "bookmark", text: note || "Bookmark" });
+	emitEvent("bookmark", entry.text);
+	res.json({ ok: true, entry });
+});
+
+app.delete("/api/transcript", (_req, res) => {
+	transcriptLog.clear();
+	emitEvent("system", "Transcript cleared");
+	res.json({ ok: true });
 });
 
 app.get("/api/network/hosts", (_req, res) => {

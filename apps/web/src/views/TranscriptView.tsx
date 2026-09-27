@@ -26,6 +26,7 @@ interface ParsedEntry {
   channel: string;
   sender: string;
   text: string;
+  bookmark?: boolean;
 }
 
 /** Parse "[Channel] Sender: text" format emitted by server */
@@ -33,6 +34,10 @@ function parseTranscript(e: EventItem): ParsedEntry | null {
   const m = e.message.match(/^\[([^\]]+)\]\s+(.+?):\s+(.+)$/);
   if (!m) return null;
   return { id: e.id, ts: e.ts, channel: m[1], sender: m[2], text: m[3] };
+}
+
+function parseBookmark(e: EventItem): ParsedEntry {
+  return { id: e.id, ts: e.ts, channel: "", sender: "", text: e.message, bookmark: true };
 }
 
 function getModelLang(): "en" | "de" {
@@ -54,6 +59,22 @@ function SenderAvatar({ name }: { name: string }) {
   );
 }
 
+function Bubble({ e, bookmarkLabel }: { e: ParsedEntry; bookmarkLabel: string }) {
+  return (
+    <div className={`chatBubble${e.bookmark ? " bookmark" : ""}`}>
+      {e.bookmark ? <div className="chatAvatar bookmarkMark">★</div> : <SenderAvatar name={e.sender} />}
+      <div className="chatBubbleBody">
+        <div className="chatMeta">
+          <span className="chatSender">{e.bookmark ? bookmarkLabel : e.sender}</span>
+          {!e.bookmark && <span className="chatChannel">{e.channel}</span>}
+          <span className="chatTime">{new Date(e.ts).toLocaleTimeString()}</span>
+        </div>
+        <div className="chatText">{e.text}</div>
+      </div>
+    </div>
+  );
+}
+
 export function TranscriptView({ state, api, compact = false }: Props) {
   const { t } = useLang();
   const [query, setQuery] = useState("");
@@ -61,6 +82,7 @@ export function TranscriptView({ state, api, compact = false }: Props) {
   const [status, setStatus] = useState<TranscriptionStatus | null>(null);
   const [installing, setInstalling] = useState(false);
   const [modelLang, setModelLangState] = useState<"en" | "de">(getModelLang);
+  const [note, setNote] = useState("");
 
   const channelList = Object.values(state.channels);
 
@@ -89,6 +111,22 @@ export function TranscriptView({ state, api, compact = false }: Props) {
     }
   }
 
+  async function addBookmark() {
+    await api("POST", "/api/transcript/bookmark", { note });
+    setNote("");
+  }
+
+  async function clearTranscript() {
+    if (!window.confirm(t.transcriptClearConfirm)) return;
+    await api("DELETE", "/api/transcript");
+  }
+
+  // One selected channel narrows the export too; several or none export all.
+  const exportChannelId =
+    selectedChannels.size === 1 ? channelList.find((c) => selectedChannels.has(c.name))?.id : undefined;
+  const exportHref = (format: string) =>
+    `/api/transcript?format=${format}${exportChannelId ? `&channel=${encodeURIComponent(exportChannelId)}` : ""}`;
+
   function toggleChannel(name: string) {
     setSelectedChannels((prev) => {
       const next = new Set(prev);
@@ -99,12 +137,11 @@ export function TranscriptView({ state, api, compact = false }: Props) {
 
   const entries = useMemo((): ParsedEntry[] => {
     return state.events
-      .filter((e: EventItem) => e.type === "transcript")
-      .map(parseTranscript)
+      .map((e: EventItem) => (e.type === "transcript" ? parseTranscript(e) : e.type === "bookmark" ? parseBookmark(e) : null))
       .filter((x): x is ParsedEntry => x !== null)
       .filter((e) => {
         const textOk = query.trim() === "" || e.text.toLowerCase().includes(query.toLowerCase());
-        const chOk = selectedChannels.size === 0 || selectedChannels.has(e.channel);
+        const chOk = e.bookmark || selectedChannels.size === 0 || selectedChannels.has(e.channel);
         return textOk && chOk;
       })
       .sort((a, b) => a.ts - b.ts); // oldest first → chat flow
@@ -114,19 +151,7 @@ export function TranscriptView({ state, api, compact = false }: Props) {
     return (
       <div className="chatLog compactChat">
         {entries.length === 0 && <p className="chatEmpty">{t.transcriptChatEmpty}</p>}
-        {entries.map((e) => (
-          <div key={e.id} className="chatBubble">
-            <SenderAvatar name={e.sender} />
-            <div className="chatBubbleBody">
-              <div className="chatMeta">
-                <span className="chatSender">{e.sender}</span>
-                <span className="chatChannel">{e.channel}</span>
-                <span className="chatTime">{new Date(e.ts).toLocaleTimeString()}</span>
-              </div>
-              <div className="chatText">{e.text}</div>
-            </div>
-          </div>
-        ))}
+        {entries.map((e) => <Bubble key={e.id} e={e} bookmarkLabel={t.transcriptBookmarkLabel} />)}
       </div>
     );
   }
@@ -186,22 +211,29 @@ export function TranscriptView({ state, api, compact = false }: Props) {
         />
       </div>
 
+      {/* Bookmarks and export */}
+      <div className="transcriptActions">
+        <input
+          className="searchInput"
+          placeholder={t.transcriptBookmarkPlaceholder}
+          aria-label={t.transcriptBookmarkPlaceholder}
+          value={note}
+          maxLength={500}
+          onChange={(e) => setNote(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") void addBookmark(); }}
+        />
+        <button className="btnSmall" onClick={() => void addBookmark()}>{t.transcriptBookmarkBtn}</button>
+        <span className="transcriptExportLabel">{t.transcriptExport}</span>
+        <a className="btnSmall" href={exportHref("txt")} download>TXT</a>
+        <a className="btnSmall" href={exportHref("srt")} download>SRT</a>
+        <a className="btnSmall" href={exportHref("json")} download>JSON</a>
+        <button className="btnSmall" onClick={() => void clearTranscript()}>{t.transcriptClear}</button>
+      </div>
+
       {/* Chat log */}
       <div className="chatLog">
         {entries.length === 0 && <p className="chatEmpty">{t.transcriptChatEmpty}</p>}
-        {entries.map((e) => (
-          <div key={e.id} className="chatBubble">
-            <SenderAvatar name={e.sender} />
-            <div className="chatBubbleBody">
-              <div className="chatMeta">
-                <span className="chatSender">{e.sender}</span>
-                <span className="chatChannel">{e.channel}</span>
-                <span className="chatTime">{new Date(e.ts).toLocaleTimeString()}</span>
-              </div>
-              <div className="chatText">{e.text}</div>
-            </div>
-          </div>
-        ))}
+        {entries.map((e) => <Bubble key={e.id} e={e} bookmarkLabel={t.transcriptBookmarkLabel} />)}
       </div>
     </div>
   );
