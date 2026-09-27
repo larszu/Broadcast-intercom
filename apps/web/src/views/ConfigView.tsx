@@ -10,6 +10,7 @@ import { PluginBridgeSettings } from "./PluginBridgeSettings";
 import { HostSettings } from "./HostSettings";
 import { PlanImport } from "./PlanImport";
 import { DeviceTypesView } from "./DeviceTypesView";
+import { AutomationView } from "./AutomationView";
 import { useLang } from "../i18n";
 
 interface Props {
@@ -18,7 +19,7 @@ interface Props {
   api: <T = unknown>(method: "GET" | "POST" | "PATCH" | "DELETE", url: string, body?: unknown) => Promise<T>;
 }
 
-type ConfigTab = "channels" | "devices" | "types" | "audio" | "plan" | "settings";
+type ConfigTab = "channels" | "devices" | "types" | "audio" | "automation" | "plan" | "settings";
 
 export function ConfigView({ state, events, api }: Props) {
   const { t } = useLang();
@@ -38,6 +39,7 @@ export function ConfigView({ state, events, api }: Props) {
     { id: "devices", label: t.tabDevicesUsers },
     { id: "types", label: t.tabDeviceTypes },
     { id: "audio", label: t.tabAudio },
+    { id: "automation", label: t.tabAutomation },
     { id: "plan", label: t.tabPlanImport },
     { id: "settings", label: t.tabSettingsLogs },
   ];
@@ -90,6 +92,12 @@ export function ConfigView({ state, events, api }: Props) {
           <div className="configAudioPane">
             <AudioSettings state={state} api={api} />
             <PluginBridgeSettings api={api} />
+          </div>
+        )}
+
+        {tab === "automation" && (
+          <div className="configAudioPane">
+            <AutomationView state={state} api={api} />
           </div>
         )}
 

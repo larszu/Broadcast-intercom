@@ -421,6 +421,26 @@ export type ControlAction =
   | "emergency_start"
   | "emergency_stop";
 
+/**
+ * What a keyword rule does when it hears its word. Deliberately no MIDI (needs
+ * a native module on every host) and no local shell command (a transcript
+ * line would decide what runs on the core machine).
+ */
+export type KeywordAction =
+  | { kind: "webhook"; url: string }
+  | { kind: "osc"; host: string; port: number; address: string };
+
+/** A word or phrase in a transcript line triggers an action. */
+export interface KeywordRule {
+  id: string;
+  /** Matched as a whole word or phrase, case-insensitive. */
+  keyword: string;
+  /** Only lines from this channel; empty = every channel. */
+  channelId?: string;
+  enabled: boolean;
+  action: KeywordAction;
+}
+
 export interface CoreState {
   activeConfig: ConfigRef;
   users: Record<string, IntercomUser>;
@@ -438,6 +458,8 @@ export interface CoreState {
   sessions: Record<string, ClientSession>;
   matrixRoutes: MatrixRoute[];
   pluginBridge: PluginBridgeConfig;
+  /** Keyword rules on transcript lines (optional: older configs lack it). */
+  keywordRules?: KeywordRule[];
   /** Gerätepräsenz (online/offline) — dynamisch, nicht in Config gespeichert */
   presence?: Record<string, { online: boolean; lastSeenAt: number }>;
   events: EventItem[];
