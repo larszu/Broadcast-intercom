@@ -125,6 +125,29 @@ export function PhoneClient({ state, sendWs, connected, setAudioChunkHandler }: 
     }
   }, [forcedClientId]);
 
+  // A beltpack whose screen goes dark mid-show drops its PTT bar out of reach.
+  // The browser releases the lock whenever the page is hidden, so it is taken
+  // again on every return. Unsupported or refused (low battery): no lock, the
+  // page works as before.
+  useEffect(() => {
+    if (!setupDone || !("wakeLock" in navigator)) return;
+    let lock: WakeLockSentinel | null = null;
+    let active = true;
+    const take = () => {
+      if (document.visibilityState !== "visible") return;
+      navigator.wakeLock.request("screen").then((l) => {
+        if (active) lock = l; else void l.release();
+      }).catch(() => undefined);
+    };
+    take();
+    document.addEventListener("visibilitychange", take);
+    return () => {
+      active = false;
+      document.removeEventListener("visibilitychange", take);
+      void lock?.release();
+    };
+  }, [setupDone]);
+
   useEffect(() => {
     if (!activeChannel && availableChannels.length > 0) {
       setActiveChannel(availableChannels[0].id);

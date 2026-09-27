@@ -241,6 +241,20 @@ async function run() {
 	check("transcript rejects an unknown format", (await fetch(`${BASE}/api/transcript?format=doc`)).status === 400);
 	check("transcript clears", (await api("DELETE", "/api/transcript")).status === 200 && ((await api("GET", "/api/transcript")).json?.entries ?? []).length === 0);
 
+	// ── Browser beltpack as PWA ──
+	// Only when the core serves a web build (CI builds before the smoke test);
+	// in a dev run without apps/web/dist the files are not there to serve.
+	const mf = await fetch(`${BASE}/manifest.webmanifest`);
+	if (mf.ok) {
+		const m = await mf.json().catch(() => null);
+		check("manifest starts the beltpack", m?.start_url === "/?mode=client" && m?.display === "standalone");
+		check("manifest icons are served", (await Promise.all((m?.icons ?? []).map((i) => fetch(BASE + i.src).then((r) => r.ok)))).every(Boolean) && (m?.icons ?? []).length >= 2);
+		const sw = await fetch(`${BASE}/sw.js`);
+		check("service worker is served as script", sw.ok && /javascript/.test(sw.headers.get("content-type") ?? ""));
+	} else {
+		results.push("  –  PWA checks skipped (no web build served)");
+	}
+
 	// ── Cleanup ──
 	check("DELETE device → 200", (await api("DELETE", "/api/devices/bp-smoke-1")).status === 200);
 	check("DELETE device ws → 200", (await api("DELETE", "/api/devices/ws-smoke-1")).status === 200);
