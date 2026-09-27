@@ -116,6 +116,12 @@ jobs:
       - name: Geraetebibliothek haelt ihren Vertrag
         run: npm run library:check
 
+      # Quellsprache der Oberflaeche ist Englisch (E-28 der Suite), Deutsch
+      # kommt aus i18n.tsx. Liest den Syntaxbaum, damit auch neue Ansichten
+      # erfasst sind und nicht nur die, die schon einmal aufgefallen sind.
+      - name: Oberflaechentexte kommen aus i18n (Quellsprache en)
+        run: npm run lang:check
+
       - name: Kern starten
         run: |
           MOCK_DEVICES=1 node apps/server/dist/index.js > /tmp/intercom.log 2>&1 &

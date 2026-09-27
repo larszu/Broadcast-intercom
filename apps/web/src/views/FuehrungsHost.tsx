@@ -14,11 +14,13 @@
  */
 import { useEffect, useLayoutEffect, useState } from "react";
 import { useFuehrung, fuehrungWeiter, fuehrungZurueck, fuehrungBeenden } from "../lib/fuehrung";
+import { useLang } from "../i18n";
 
 interface Kasten { top: number; left: number; width: number; height: number }
 
 export function FuehrungsHost() {
   const { laeuft, schritt, index, schritte } = useFuehrung();
+  const { t } = useLang();
   const [kasten, setKasten] = useState<Kasten | null>(null);
 
   // Das Ziel kann erst nach dem Seiten-/Reiterwechsel im Dokument stehen.
@@ -100,15 +102,15 @@ export function FuehrungsHost() {
         />
       )}
       <div className="fuehrungBlase" role="dialog" aria-live="polite" style={blaseStil}>
-        <div className="fuehrungZaehler">Schritt {index + 1} von {schritte.length}</div>
-        <h3 className="fuehrungTitel">{schritt.titel}</h3>
-        <p className="fuehrungText">{schritt.text}</p>
+        <div className="fuehrungZaehler">{t.guideStep.replace("{n}", String(index + 1)).replace("{total}", String(schritte.length))}</div>
+        <h3 className="fuehrungTitel">{t[schritt.titel]}</h3>
+        <p className="fuehrungText">{t[schritt.text]}</p>
         <div className="fuehrungFuss">
-          <button className="btnGhost" onClick={fuehrungBeenden}>Abbrechen</button>
+          <button className="btnGhost" onClick={fuehrungBeenden}>{t.guideCancel}</button>
           <div className="fuehrungNav">
             {index > 0 && <button className="btnGhost" onClick={fuehrungZurueck}>←</button>}
             <button className="btnAccent" onClick={fuehrungWeiter}>
-              {index === schritte.length - 1 ? "Fertig" : "Weiter"}
+              {index === schritte.length - 1 ? t.guideDone : t.guideNext}
             </button>
           </div>
         </div>

@@ -25,12 +25,14 @@
  * Loeschen auf.
  */
 import { useSyncExternalStore } from "react";
+import type { Strings } from "../i18n";
 
 export interface FuehrungsSchritt {
   /** Wert des `data-fuehrung`-Attributs am hervorzuhebenden Element. */
   ziel: string;
-  titel: string;
-  text: string;
+  /** i18n-Schluessel, nicht der Text: die Fuehrung spricht die Sprache der Oberflaeche. */
+  titel: keyof Strings;
+  text: keyof Strings;
   /**
    * Wohin die Anwendung muss, damit das Ziel ueberhaupt im Dokument steht.
    * App und ConfigView lesen das und schalten selbst um — die Fuehrung
@@ -57,37 +59,37 @@ export const ERSTER_BENUTZER: FuehrungsSchritt[] = [
   {
     ziel: "nav-setup",
     seite: "monitor",
-    titel: "Hier wird eingerichtet",
-    text: "Alles, was einmal pro Produktion eingestellt wird, liegt unter „Setup“.",
+    titel: "guideSetupTitle",
+    text: "guideSetupText",
     weiterBeiKlick: true,
   },
   {
     ziel: "tab-devices",
     seite: "setup",
-    titel: "Geräte & Benutzer",
-    text: "Beltpacks, Handys und die Leute, die sie benutzen.",
+    titel: "guideDevicesTitle",
+    text: "guideDevicesText",
     weiterBeiKlick: true,
   },
   {
     ziel: "user-name",
     seite: "setup",
     reiter: "devices",
-    titel: "Wer spricht?",
-    text: "Ein Name, unter dem die Person in den Konferenzen auftaucht — „Regie“, „Kamera 2“, „Ton“.",
+    titel: "guideNameTitle",
+    text: "guideNameText",
   },
   {
-    ziel: "user-rolle",
+    ziel: "user-role",
     seite: "setup",
     reiter: "devices",
-    titel: "Was darf sie?",
-    text: "Die Rolle entscheidet über Rechte. Im Zweifel die einfachste nehmen — ändern geht jederzeit.",
+    titel: "guideRoleTitle",
+    text: "guideRoleText",
   },
   {
-    ziel: "user-anlegen",
+    ziel: "user-create",
     seite: "setup",
     reiter: "devices",
-    titel: "Anlegen",
-    text: "Danach bekommt der Benutzer seine Konferenzen zugewiesen — das ist die Zeile, die gleich unten erscheint.",
+    titel: "guideCreateTitle",
+    text: "guideCreateText",
     weiterBeiKlick: true,
   },
 ];
