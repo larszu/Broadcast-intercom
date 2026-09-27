@@ -323,7 +323,7 @@ export interface TemporaryChannel {
 export interface EventItem {
   id: string;
   ts: number;
-  type: "register" | "heartbeat" | "talk" | "listen" | "assign" | "matrix" | "config" | "system" | "call" | "transcript";
+  type: "register" | "heartbeat" | "talk" | "listen" | "assign" | "matrix" | "config" | "system" | "call" | "transcript" | "bookmark";
   message: string;
 }
 

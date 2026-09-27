@@ -34,7 +34,7 @@ publishes by itself — nothing in this repo needs changing.
 - **Role-based permissions** — `admin`, `director`, `operator`, `talent` roles gate talk/listen/transcription and management rights
 - **Device Manager** — hardware beltpacks (Ethernet/DECT/WiFi) with full config; browser beltpacks via invite link
 - **Companion / Stream Deck control** — REST control endpoint plus a ready-to-use [Bitfocus Companion module](companion-module/) (`companion-module/`)
-- **Audio transcription** — optional Vosk speech-to-text per channel
+- **Audio transcription** — optional Vosk speech-to-text per channel; the transcript view filters by channel and text, pins channels to the front (per browser) and counts unread lines of channels filtered out, takes operator **bookmarks** ("cue 34 late") in the same timeline, and exports the show's transcript as **TXT, SRT or JSON** (`GET /api/transcript?format=txt|srt|json[&channel=<id>]`, bookmark via `POST /api/transcript/bookmark`). The server keeps the last 5,000 lines and bookmarks until *Clear transcript*
 - **Plugin Bridge** — optional VST/audio plugin integration via WebSocket
 - **Device library** — sign in to [devices.zumpelars.de](https://devices.zumpelars.de) (Setup → Settings & Logs), sync shared intercom device types as a read-only source; own device types are uploaded automatically (new or changed ones, at start and after each edit) and **Sync now** uploads, then fetches; the `intercom` facet format is documented in [docs/device-library.md](docs/device-library.md)
 - **Device types** — own and library types under Setup → Device types; *Add device* takes role and transports from the picked type

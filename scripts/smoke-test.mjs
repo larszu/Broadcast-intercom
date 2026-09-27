@@ -226,6 +226,21 @@ async function run() {
 	if (pgm) await api("DELETE", `/api/channels/${pgm.id}`);
 	if (regie) await api("DELETE", `/api/users/${regie.id}`);
 
+	// ── Transcript: bookmarks and export ──
+	// Speech needs a Vosk model, which CI does not have; a bookmark goes into
+	// the same log, so it proves the export path end to end.
+	const mark = await api("POST", "/api/transcript/bookmark", { note: "SMOKE cue 34 late" });
+	check("bookmark → 200", mark.status === 200 && mark.json?.entry?.kind === "bookmark");
+	check("bookmark shows in the event feed", ((await api("GET", "/api/state")).json?.events ?? []).some((e) => e.type === "bookmark" && e.message === "SMOKE cue 34 late"));
+	const tj = await api("GET", "/api/transcript");
+	check("transcript lists the bookmark", (tj.json?.entries ?? []).some((e) => e.text === "SMOKE cue 34 late"));
+	const txt = await fetch(`${BASE}/api/transcript?format=txt`);
+	check("transcript TXT is an attachment", /attachment; filename="transcript-.*\.txt"/.test(txt.headers.get("content-disposition") ?? "") && (await txt.text()).includes("BOOKMARK: SMOKE cue 34 late"));
+	const srt = await (await fetch(`${BASE}/api/transcript?format=srt`)).text();
+	check("transcript SRT has a cue with timing", /^1\n00:00:00,000 --> 00:00:0\d,\d{3}\nBOOKMARK: /m.test(srt));
+	check("transcript rejects an unknown format", (await fetch(`${BASE}/api/transcript?format=doc`)).status === 400);
+	check("transcript clears", (await api("DELETE", "/api/transcript")).status === 200 && ((await api("GET", "/api/transcript")).json?.entries ?? []).length === 0);
+
 	// ── Cleanup ──
 	check("DELETE device → 200", (await api("DELETE", "/api/devices/bp-smoke-1")).status === 200);
 	check("DELETE device ws → 200", (await api("DELETE", "/api/devices/ws-smoke-1")).status === 200);
