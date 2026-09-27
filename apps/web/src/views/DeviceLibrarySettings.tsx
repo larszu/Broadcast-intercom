@@ -120,6 +120,15 @@ export function DeviceLibrarySettings() {
         </div>
       )}
       {lib.phase === "signed-in" && lib.tokenSessionOnly && <p className="libHint">{t.libSessionOnly}</p>}
+      {lib.phase === "signed-in" && (
+        <div className="libRow">
+          <button type="button" disabled={lib.busy} title={t.dtSyncHint} onClick={() => void actions.syncNow()}>{lib.busy ? t.dtSyncing : t.dtSync}</button>
+        </div>
+      )}
+      <label className="libCheck">
+        <input type="checkbox" checked={lib.autoUpload} onChange={(e) => actions.setAutoUpload(e.target.checked)} />
+        <span>{t.libAutoUpload}<em className="libDim"> — {t.libAutoUploadHint}</em></span>
+      </label>
       {lib.phase === "signed-out" && !error && <p className="libHint">{t.libSignedOut}</p>}
 
       <LibraryErrorMessage error={lib.error} server={lib.server} />

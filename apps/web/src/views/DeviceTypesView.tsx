@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useLang, type Strings } from "../i18n";
 import { actions, useDeviceLibrary, type OwnDeviceType } from "../lib/deviceLibrary/deviceLibraryStore";
-import { deviceUrl, LibraryError } from "../lib/deviceLibrary/deviceLibraryClient";
+import { deviceUrl } from "../lib/deviceLibrary/deviceLibraryClient";
+import { uploadStatus } from "../lib/deviceLibrary/libraryUpload";
 import {
   DEVICE_KINDS,
   DEVICE_TRANSPORTS,
@@ -17,7 +18,6 @@ import {
 } from "../lib/deviceLibrary/intercomDeviceType";
 import type { LibraryEntry } from "../lib/deviceLibrary/librarySync";
 import { LibraryErrorMessage } from "./DeviceLibrarySettings";
-import type { LibraryState } from "../lib/deviceLibrary/deviceLibraryStore";
 
 export const kindLabel = (t: Strings, k: DeviceKind): string =>
   ({ beltpack: t.dtKindBeltpack, deskstation: t.dtKindDeskstation, antenna: t.dtKindAntenna, interface: t.dtKindInterface })[k];
@@ -132,29 +132,30 @@ function TypeForm({ initial, onDone }: { initial: OwnDeviceType; onDone: () => v
   );
 }
 
+function uploadLabel(t: Strings, s: ReturnType<typeof uploadStatus>): string {
+  switch (s) {
+    case "never": return t.upNever;
+    case "changed": return t.upChanged;
+    case "created": return t.upCreated;
+    case "edit-proposed": return t.upEditProposed;
+    case "pending-updated": return t.upPendingUpdated;
+    case "approved": return t.upApproved;
+    case "in-sync": return t.upInSync;
+    case "blocked": return t.upBlocked;
+    case "error": return t.upError;
+    default: {
+      const missing: never = s;
+      return missing;
+    }
+  }
+}
+
 function OwnRow({ type, onEdit }: { type: OwnDeviceType; onEdit: () => void }) {
   const { t } = useLang();
   const lib = useDeviceLibrary();
-  const [note, setNote] = useState("");
-  const [failure, setFailure] = useState<LibraryState["error"]>(null);
-  const [sending, setSending] = useState(false);
-
-  async function propose() {
-    if (!type.sourceUrl) { setNote(t.dtProposeNeedsSource); return; }
-    if (lib.phase !== "signed-in") { setNote(t.dtProposeNeedsSignIn); return; }
-    setSending(true);
-    setNote("");
-    setFailure(null);
-    try {
-      await actions.propose(type);
-      setNote(t.dtProposed);
-    } catch (e) {
-      if (e instanceof LibraryError) setFailure(e.code);
-      else setNote(String((e as Error).message ?? e));
-    } finally {
-      setSending(false);
-    }
-  }
+  const rec = lib.uploads.records[type.id];
+  const status = uploadStatus(type, lib.uploads);
+  const detail = rec?.error === "no-source" ? t.upNoSource : [rec?.findings?.join(", "), rec?.error].filter(Boolean).join(" — ");
 
   return (
     <li className="dtItem">
@@ -163,12 +164,12 @@ function OwnRow({ type, onEdit }: { type: OwnDeviceType; onEdit: () => void }) {
         <span className="libDim">{summary(t, type.facet)}</span>
       </div>
       <div className="libRow">
+        <span className={`dtStatus dtUpload-${status}`}>{uploadLabel(t, status)}</span>
+        {rec?.slug && <a href={deviceUrl(lib.server, rec.slug)} target="_blank" rel="noreferrer">{t.dtOpen}</a>}
         <button type="button" className="btnSmall" onClick={onEdit}>{t.dtEdit}</button>
-        <button type="button" className="btnSmall" disabled={sending} onClick={() => void propose()}>{t.dtPropose}</button>
         <button type="button" className="btnSmall danger" onClick={() => actions.deleteOwn(type.id)}>{t.dtDelete}</button>
       </div>
-      {note && <p className="libHint">{note}</p>}
-      <LibraryErrorMessage error={failure} server={lib.server} />
+      {detail && <p className="libHint">{detail}</p>}
     </li>
   );
 }
@@ -207,7 +208,7 @@ export function DeviceTypesView() {
         <div className="libRow">
           <span className="libDim">{t.dtLibraryReadOnly}</span>
           {lib.phase === "signed-in" && (
-            <button type="button" className="btnSmall" disabled={lib.busy} onClick={() => void actions.sync()}>{lib.busy ? t.dtSyncing : t.dtSync}</button>
+            <button type="button" className="btnSmall" disabled={lib.busy} title={t.dtSyncHint} onClick={() => void actions.syncNow()}>{lib.busy ? t.dtSyncing : t.dtSync}</button>
           )}
           {lib.cache.syncedAt && <span className="libDim">{t.dtSyncedAt}: {new Date(lib.cache.syncedAt).toLocaleString()}</span>}
         </div>

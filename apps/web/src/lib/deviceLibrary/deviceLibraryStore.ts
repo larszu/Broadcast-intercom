@@ -10,16 +10,17 @@ import { useSyncExternalStore } from "react";
 import {
   currentUser,
   LibraryError,
-  propose as proposeRemote,
   signIn as signInRemote,
   signOut as signOutRemote,
   sync as syncRemote,
+  upload as uploadRemote,
   verifySecondFactor,
   type LibraryErrorCode,
   type LibraryUser,
   type SignInResult,
 } from "./deviceLibraryClient.ts";
-import { toFacet, type IntercomDeviceType } from "./intercomDeviceType.ts";
+import type { IntercomDeviceType } from "./intercomDeviceType.ts";
+import { applyUpload, ledgerFor, planUpload, pruneLedger, type UploadLedger } from "./libraryUpload.ts";
 import { applySync, cacheFor, effectiveServer, readServerUrl, type LibraryCache } from "./librarySync.ts";
 
 interface DesktopTokenBridge {
@@ -39,6 +40,10 @@ const KEY_SERVER = "deviceLibrary.server";
 const KEY_TOKEN = "deviceLibrary.token";
 const KEY_CACHE = "deviceLibrary.cache";
 const KEY_OWN = "deviceLibrary.ownTypes";
+const KEY_UPLOADS = "deviceLibrary.uploads";
+const KEY_AUTO = "deviceLibrary.autoUpload";
+/** Edits come in bursts (typing, several saves); one upload after they settle. */
+const AUTO_DELAY_MS = 2000;
 
 const read = (k: string): string | null => {
   try {
@@ -112,6 +117,10 @@ export interface LibraryState {
   busy: boolean;
   cache: LibraryCache;
   own: OwnDeviceType[];
+  /** Last upload per own type, with the hash of what was sent. */
+  uploads: UploadLedger;
+  /** Upload own types on start and after each change. Default on. */
+  autoUpload: boolean;
 }
 
 let token: string | null = null;
@@ -128,6 +137,8 @@ let state: LibraryState = {
   busy: false,
   cache: cacheFor(readJson(KEY_CACHE), initialServer),
   own: loadOwn(),
+  uploads: ledgerFor(readJson(KEY_UPLOADS), initialServer),
+  autoUpload: read(KEY_AUTO) !== "0",
 };
 
 function loadOwn(): OwnDeviceType[] {
@@ -140,6 +151,7 @@ function set(patch: Partial<LibraryState>) {
   state = { ...state, ...patch };
   if (patch.cache) write(KEY_CACHE, JSON.stringify(patch.cache));
   if (patch.own) write(KEY_OWN, JSON.stringify(patch.own));
+  if (patch.uploads) write(KEY_UPLOADS, JSON.stringify(patch.uploads));
   for (const l of listeners) l();
 }
 
@@ -162,7 +174,7 @@ async function restore() {
       return;
     }
     set({ phase: "signed-in", user });
-    await actions.sync();
+    await actions.syncAuto();
   } catch {
     // Offline at start: keep the token, show the cached copy, sync later.
     set({ phase: "signed-in", user: null, error: "offline" });
@@ -182,7 +194,7 @@ async function finish(r: SignInResult) {
   token = r.token;
   const stored = await tokenStore.save({ server: state.server, token: r.token });
   set({ busy: false, phase: "signed-in", user: r.user, error: null, tokenSessionOnly: !stored });
-  await actions.sync();
+  await actions.syncAuto();
 }
 
 async function dropSession(error: LibraryState["error"] = null) {
@@ -233,7 +245,7 @@ export const actions = {
       return true;
     }
     if (token) await signOutRemote(state.server, token);
-    set({ server: next, serverCustom: next !== effectiveServer(null), cache: cacheFor(null, next) });
+    set({ server: next, serverCustom: next !== effectiveServer(null), cache: cacheFor(null, next), uploads: ledgerFor(null, next) });
     await dropSession();
     return true;
   },
@@ -249,40 +261,70 @@ export const actions = {
       else set({ busy: false, error: code });
     }
   },
-  /** Submits an own type. The library moderates it before others see it. */
-  async propose(type: OwnDeviceType): Promise<{ slug: string; state: string }> {
-    if (!token) throw new LibraryError("not-signed-in");
-    if (!type.sourceUrl) throw new Error("datasheet link missing");
-    const facet = toFacet(type);
-    try {
-      return await proposeRemote(
-        state.server,
-        token,
-        "intercom",
-        {
-          manufacturer: type.manufacturer.trim(),
-          model: type.model.trim(),
-          category: "Intercom",
-          description: type.description?.trim() || undefined,
-          sourceUrl: type.sourceUrl.trim(),
-        },
-        facet as unknown as Record<string, unknown>,
-      );
-    } catch (e) {
-      if (codeOf(e) === "not-signed-in") await dropSession("not-signed-in");
-      throw e;
+  /** Own types that are new, changed or failed go up; the answer is kept per type. */
+  async upload() {
+    if (!token) return;
+    const plan = planUpload(state.own, state.uploads);
+    if (plan.items.length === 0) {
+      if (Object.keys(plan.local).length) set({ uploads: applyUpload(state.uploads, plan, []) });
+      return;
     }
+    set({ busy: true, error: null });
+    try {
+      const results = await uploadRemote(state.server, token, "intercom", plan.items);
+      set({ busy: false, uploads: applyUpload(state.uploads, plan, results) });
+    } catch (e) {
+      const code = codeOf(e);
+      if (code === "not-signed-in" || code === "wrong-credentials") await dropSession("not-signed-in");
+      else set({ busy: false, error: code });
+    }
+  },
+  /** "Sync now": up first, so the answer already contains what was just sent. */
+  async syncNow() {
+    // One run at a time; an edit during a run schedules the next one.
+    if (running) return scheduleAuto();
+    running = true;
+    try {
+      await actions.upload();
+      if (token && !state.error) await actions.sync();
+    } finally {
+      running = false;
+    }
+  },
+  /** After sign-in, at start and after edits: upload only when switched on. */
+  async syncAuto() {
+    if (state.autoUpload) await actions.syncNow();
+    else await actions.sync();
+  },
+  setAutoUpload(on: boolean) {
+    write(KEY_AUTO, on ? null : "0");
+    set({ autoUpload: on });
+    if (on) scheduleAuto();
   },
   saveOwn(type: OwnDeviceType) {
     const own = state.own.some((t) => t.id === type.id)
       ? state.own.map((t) => (t.id === type.id ? type : t))
       : [...state.own, type];
     set({ own });
+    scheduleAuto();
   },
   deleteOwn(id: string) {
-    set({ own: state.own.filter((t) => t.id !== id) });
+    const own = state.own.filter((t) => t.id !== id);
+    // Only the local record goes. The library entry is shared and stays.
+    set({ own, uploads: pruneLedger(state.uploads, own.map((t) => t.id)) });
   },
 };
+
+let running = false;
+let autoTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleAuto() {
+  if (!state.autoUpload) return;
+  if (autoTimer) clearTimeout(autoTimer);
+  autoTimer = setTimeout(() => {
+    autoTimer = null;
+    if (token && state.phase === "signed-in") void actions.syncNow();
+  }, AUTO_DELAY_MS);
+}
 
 void restore();
 

@@ -28,7 +28,7 @@ Reading the library needs an account. Accounts are created on the website
 
 Every error code of the client has its own message. Two need action on the
 website: *guidelines outdated* (the community guidelines changed — the message
-links to `<server>/guidelines` to accept them again) and, when submitting,
+links to `<server>/guidelines` to accept them again) and
 *already in the library* (HTTP 409 — confirm or correct the existing entry
 there instead of submitting a second one).
 
@@ -45,10 +45,13 @@ intercom core:
 **Setup → Device types** lists two sources side by side:
 
 - **Own device types** — created and edited here, stored in the browser
-  (`localStorage`). **Submit to library** sends one as a proposal; it needs a
-  link to the manufacturer datasheet and appears for others after moderation.
-- **From the device library** — read-only. **Sync** fetches everything after
-  the last known `latestSeq`; entries marked `removed` disappear, the copy is
+  (`localStorage`), and uploaded to the library (`POST /api/upload`). Each type
+  shows its upload state: not uploaded yet, changed since upload, submitted
+  (awaiting moderation), submitted as next version, open submission updated,
+  live in the library, in sync, blocked, failed — with a link to its library
+  page once it has one.
+- **From the device library** — read-only. **Sync now** first uploads new and
+  changed own types, then fetches everything after the last known `latestSeq`; entries marked `removed` disappear, the copy is
   kept across restarts. Each entry shows its status (verified, confirmed,
   unconfirmed, disputed), the number of confirmations and a link to its page in
   the library. **Copy as own** starts an own type from it.
@@ -57,13 +60,34 @@ Entries the library delivers but this planner's check refuses are **counted and
 listed** under *Delivered but not usable here*, with the reason — never used,
 never silently dropped.
 
+### Uploading
+
+The library keeps one device per manufacturer + model. Uploading a type the
+library already has adds this planner's view as the device's next version
+instead of a duplicate. Uploads are moderated unless the account is an admin.
+
+- **Upload own device types automatically** (Settings → Device library) is on
+  by default and acts while signed in: at start, after signing in, and two
+  seconds after the last edit.
+- What was sent is remembered as a hash of core + facet. An unchanged type is
+  not sent again; an edited one is. A failed upload is retried; a blocked one
+  only after an edit, because the library would block the same data again.
+- A type without a datasheet link is not sent — the library blocks devices
+  nobody can look up — and shows why.
+- Deleting an own type removes it here only. The library entry is shared and
+  stays.
+
+This repo ships no built-in device models (no fixed beltpack or antenna
+catalogue), so there is no catalogue to publish from CI; everything in the
+library comes from own types.
+
 **Add device** (Setup → Devices & Users) offers both sources as *Device type*:
 picking one sets the role (beltpack or station), limits the transports to the
 type's, and fills the label with the model.
 
 ## The `intercom` facet
 
-The facet **is** this planner's device type. Submitting writes it with
+The facet **is** this planner's device type. Uploading writes it with
 `toFacet`, syncing reads it with `readDeviceType` — the same function checks
 both directions (`intercomDeviceType.ts`).
 
@@ -112,5 +136,5 @@ system.
 `npm run library:check` (in CI): release default, address rules, facet round
 trip, project fields kept out, version/kind/transport refused by meaning,
 incremental sync with `removed` and refused entries, cache bound to its server,
-the proposal on the wire, the library's error codes (each with a text in both languages), no logging of the token, `safeStorage` in the desktop
+the proposal and the batched upload on the wire, change detection and retry rules, auto-upload wiring, the device manager's translations, the library's error codes (each with a text in both languages), no logging of the token, `safeStorage` in the desktop
 app.

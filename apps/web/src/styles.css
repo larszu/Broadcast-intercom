@@ -813,7 +813,7 @@ input[type="range"]:disabled {
 .chFilterChip.active {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
 }
 .transcriptFilters {
   padding: 0 16px 8px;
@@ -892,13 +892,14 @@ input[type="range"]:disabled {
   background: var(--accent);
   border: none;
   border-radius: 0;
-  color: #fff;
+  /* Navy auf Off-White (15,8:1). Weiss auf Off-White war unlesbar. */
+  color: var(--accent-text);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
 }
-.btnPrimary:hover { background: #3a7be8; }
+.btnPrimary:hover { background: var(--accent2); color: var(--accent-text); }
 
 /* ─────────────────────────────────────────────────────────────────────────────
    DeviceManager Accordion
@@ -1231,3 +1232,8 @@ textarea:focus-visible,
 .dtRejected summary { cursor: pointer; font-size: 13px; color: var(--text2); margin-top: 12px; }
 .dtItem .libRow { align-items: center; margin-bottom: 0; }
 .libError a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.libCheck { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; margin-bottom: 12px; }
+.dtUpload-approved, .dtUpload-in-sync { color: var(--success); }
+.dtUpload-created, .dtUpload-edit-proposed, .dtUpload-pending-updated { color: var(--text); }
+.dtUpload-never, .dtUpload-changed { color: var(--text2); }
+.dtUpload-blocked, .dtUpload-error { color: var(--warning); }

@@ -57,7 +57,7 @@ function AddDeviceForm({ state, api }: { state: CoreState; api: Props["api"] }) 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const trimId = id.trim();
-    if (!trimId) { setError("ID darf nicht leer sein."); return; }
+    if (!trimId) { setError(t.dmIdRequired); return; }
     setSaving(true);
     setError("");
     try {
@@ -71,7 +71,7 @@ function AddDeviceForm({ state, api }: { state: CoreState; api: Props["api"] }) 
       setId(""); setLabel(""); setTransport("ethernet"); setUserId(""); setTypeKey("");
       setOpen(false);
     } catch {
-      setError("Fehler beim Hinzufügen.");
+      setError(t.dmAddFailed);
     } finally {
       setSaving(false);
     }
@@ -80,10 +80,10 @@ function AddDeviceForm({ state, api }: { state: CoreState; api: Props["api"] }) 
   return (
     <div className="dmAddDevice">
       {!open ? (
-        <button className="btnPrimary" onClick={() => setOpen(true)}>+ Gerät hinzufügen</button>
+        <button className="btnPrimary" onClick={() => setOpen(true)}>{t.dmAdd}</button>
       ) : (
         <form className="dmAddForm" onSubmit={e => void submit(e)}>
-          <h4 className="dmAddFormTitle">Neues Gerät</h4>
+          <h4 className="dmAddFormTitle">{t.dmAddTitle}</h4>
           {types.length > 0 && (
             <div className="dmEditRow">
               <label>{t.dtPickType}</label>
@@ -94,30 +94,30 @@ function AddDeviceForm({ state, api }: { state: CoreState; api: Props["api"] }) 
             </div>
           )}
           <div className="dmEditRow">
-            <label>Geräte-ID *</label>
-            <input className="textInput" value={id} onChange={e => setId(e.target.value)} placeholder="z. B. bp-studio-1" />
+            <label>{t.dmId}</label>
+            <input className="textInput" value={id} onChange={e => setId(e.target.value)} placeholder={t.dmIdPlaceholder} />
           </div>
           <div className="dmEditRow">
-            <label>Anzeigename</label>
-            <input className="textInput" value={label} onChange={e => setLabel(e.target.value)} placeholder="Wird ID wenn leer" />
+            <label>{t.dmLabel}</label>
+            <input className="textInput" value={label} onChange={e => setLabel(e.target.value)} placeholder={t.dmLabelPlaceholder} />
           </div>
           <div className="dmEditRow">
-            <label>Transport</label>
+            <label>{t.dmTransport}</label>
             <select className="textInput" value={transport} onChange={e => setTransport(e.target.value as TransportType)}>
               {(picked ? picked.facet.transports : TRANSPORTS).map(x => <option key={x} value={x}>{x}</option>)}
             </select>
           </div>
           <div className="dmEditRow">
-            <label>Benutzer</label>
+            <label>{t.dmUser}</label>
             <select className="textInput" value={userId} onChange={e => setUserId(e.target.value)}>
-              <option value="">Nicht zugewiesen</option>
+              <option value="">{t.dmUnassigned}</option>
               {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
           </div>
           {error && <p className="dmAddError">{error}</p>}
           <div className="dmEditActions">
-            <button className="btnPrimary" type="submit" disabled={saving}>{saving ? "…" : "Hinzufügen"}</button>
-            <button className="btnGhost" type="button" onClick={() => { setOpen(false); setError(""); }}>Abbrechen</button>
+            <button className="btnPrimary" type="submit" disabled={saving}>{saving ? "…" : t.dmAddBtn}</button>
+            <button className="btnGhost" type="button" onClick={() => { setOpen(false); setError(""); }}>{t.dmCancel}</button>
           </div>
         </form>
       )}
@@ -141,6 +141,7 @@ function HardwareAccordion({ device, state, api }: {
   state: CoreState;
   api: Props["api"];
 }) {
+  const { t } = useLang();
   const users = Object.values(state.users);
   const channels = Object.values(state.channels);
   const [open, setOpen] = useState(false);
@@ -172,7 +173,7 @@ function HardwareAccordion({ device, state, api }: {
   }
 
   async function remove() {
-    if (!confirm(`Gerät "${device.label}" entfernen?`)) return;
+    if (!confirm(t.dmRemoveConfirm.replace("{label}", device.label))) return;
     await api("DELETE", `/api/devices/${device.id}`);
   }
 
@@ -186,8 +187,8 @@ function HardwareAccordion({ device, state, api }: {
         {user && <span className="dmUser dim">👤 {user.name}</span>}
         <span className="dmChannels dim">📡 {device.channelIds.map(id => state.channels[id]?.name ?? id).join(", ") || "—"}</span>
         <div className="dmActions" onClick={e => e.stopPropagation()}>
-          <button className="btnSmall" onClick={startEdit}>Bearbeiten</button>
-          <button className="btnSmall danger" onClick={() => void remove()}>Entfernen</button>
+          <button className="btnSmall" onClick={startEdit}>{t.dmEdit}</button>
+          <button className="btnSmall danger" onClick={() => void remove()}>{t.dmRemove}</button>
         </div>
         <span className="dmChevron">{open ? "▲" : "▼"}</span>
       </div>
@@ -196,27 +197,27 @@ function HardwareAccordion({ device, state, api }: {
           {editing ? (
             <div className="dmEditForm">
               <div className="dmEditRow">
-                <label>Name</label>
+                <label>{t.dmName}</label>
                 <input value={editLabel} onChange={e => setEditLabel(e.target.value)} className="textInput" />
               </div>
               <div className="dmEditRow">
-                <label>Benutzer</label>
+                <label>{t.dmUser}</label>
                 <select value={editUserId} onChange={e => setEditUserId(e.target.value)} className="textInput">
-                  <option value="">Nicht zugewiesen</option>
+                  <option value="">{t.dmUnassigned}</option>
                   {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
                 </select>
               </div>
               <div className="dmEditRow">
-                <label>Transport</label>
+                <label>{t.dmTransport}</label>
                 <select value={editTransport} onChange={e => setEditTransport(e.target.value as TransportType)} className="textInput">
-                  {TRANSPORTS.map(t => <option key={t} value={t}>{t}</option>)}
+                  {TRANSPORTS.map(x => <option key={x} value={x}>{x}</option>)}
                 </select>
               </div>
               <div className="dmChannelGrid">
                 {(["talk", "listen", "transcribe"] as const).map(kind => {
                   const list = kind === "talk" ? editChannels : kind === "listen" ? editListens : editTranscriptions;
                   const setList = kind === "talk" ? setEditChannels : kind === "listen" ? setEditListens : setEditTranscriptions;
-                  const lbl = kind === "talk" ? "Sprechen" : kind === "listen" ? "Mithören" : "Transkription";
+                  const lbl = kind === "talk" ? t.dmTalk : kind === "listen" ? t.dmListen : t.dmTranscription;
                   return (
                     <div key={kind} className="dmChannelCol">
                       <p className="dmChannelColLabel">{lbl}</p>
@@ -231,15 +232,15 @@ function HardwareAccordion({ device, state, api }: {
                 })}
               </div>
               <div className="dmEditActions">
-                <button className="btnPrimary" onClick={() => void save()}>Speichern</button>
-                <button className="btnGhost" onClick={() => setEditing(false)}>Abbrechen</button>
+                <button className="btnPrimary" onClick={() => void save()}>{t.dmSave}</button>
+                <button className="btnGhost" onClick={() => setEditing(false)}>{t.dmCancel}</button>
               </div>
             </div>
           ) : (
             <div className="dmDetails">
-              <span>Sprechen: <strong>{device.channelIds.map(id => state.channels[id]?.name ?? id).join(", ") || "—"}</strong></span>
-              <span>Mithören: <strong>{device.listenChannelIds.map(id => state.channels[id]?.name ?? id).join(", ") || "—"}</strong></span>
-              <span>Transkription: <strong>{(device.transcriptionChannelIds || []).map(id => state.channels[id]?.name ?? id).join(", ") || "—"}</strong></span>
+              <span>{t.dmTalk}: <strong>{device.channelIds.map(id => state.channels[id]?.name ?? id).join(", ") || "—"}</strong></span>
+              <span>{t.dmListen}: <strong>{device.listenChannelIds.map(id => state.channels[id]?.name ?? id).join(", ") || "—"}</strong></span>
+              <span>{t.dmTranscription}: <strong>{(device.transcriptionChannelIds || []).map(id => state.channels[id]?.name ?? id).join(", ") || "—"}</strong></span>
               <span className="dim" style={{ fontSize: 11 }}>ID: {device.id}</span>
             </div>
           )}
@@ -255,28 +256,30 @@ function WebClientRow({ device, state, api }: {
   state: CoreState;
   api: Props["api"];
 }) {
+  const { t } = useLang();
   const user = device.userId ? state.users[device.userId] : null;
   const online = Boolean(state.presence?.[device.id]?.online);
 
   async function remove() {
-    if (!confirm(`"${device.label}" aus der Liste entfernen?`)) return;
+    if (!confirm(t.dmRemoveFromListConfirm.replace("{label}", device.label))) return;
     await api("DELETE", `/api/devices/${device.id}`);
   }
 
   return (
     <div className="dmWebRow">
-      <span className={`onlineDot ${online ? "on" : "off"}`} title={online ? "Verbunden" : "Nicht verbunden"} />
+      <span className={`onlineDot ${online ? "on" : "off"}`} title={online ? t.dmConnected : t.dmDisconnected} />
       <strong className="dmLabel">{device.label}</strong>
       {user && <span className="dmUser dim">👤 {user.name}</span>}
       <span className="dmChannels dim">📡 {device.channelIds.map(id => state.channels[id]?.name ?? id).join(", ") || "—"}</span>
       <div className="dmActions">
-        <button className="btnSmall danger" onClick={() => void remove()} title="Aus der Geräteliste entfernen">Entfernen</button>
+        <button className="btnSmall danger" onClick={() => void remove()} title={t.dmRemoveFromListTip}>{t.dmRemove}</button>
       </div>
     </div>
   );
 }
 
 export function DeviceManager({ state, api }: Props) {
+  const { t } = useLang();
   const devices = Object.values(state.devices);
   const [lanHosts, setLanHosts] = useState<string[]>([]);
   const [selectedHost, setSelectedHost] = useState("");
@@ -318,11 +321,11 @@ export function DeviceManager({ state, api }: Props) {
 
   return (
     <div className="viewPanel dmPanel">
-      <h2>Geräte</h2>
+      <h2>{t.dmTitle}</h2>
 
       {/* Hardware devices */}
       <section className="dmSection">
-        <h3 className="dmSectionTitle">Hardware-Geräte</h3>
+        <h3 className="dmSectionTitle">{t.dmHardware}</h3>
         {hardwareDevices.map(d => (
           <HardwareAccordion key={d.id} device={d} state={state} api={api} />
         ))}
@@ -331,16 +334,16 @@ export function DeviceManager({ state, api }: Props) {
 
       {/* Browser beltpacks */}
       <section className="dmSection">
-        <h3 className="dmSectionTitle">Browser-Beltpacks</h3>
+        <h3 className="dmSectionTitle">{t.dmBrowserTitle}</h3>
         <p className="dmSectionDesc">
-          Ein Handy, Tablet oder PC-Tab wird zum Beltpack wenn es diesen Link öffnet. Name, Benutzer und Kanäle stellt jedes Beltpack direkt bei sich selbst ein.
+          {t.dmBrowserDesc}
         </p>
 
         {/* Invite link box */}
         <div className="dmInviteBox">
           {lanHosts.length > 1 && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") && (
             <div className="dmHostSelect">
-              <label className="dim">WLAN-Adresse:</label>
+              <label className="dim">{t.dmWlan}</label>
               <select value={selectedHost} onChange={e => setSelectedHost(e.target.value)} className="textInput" style={{ width: "auto" }}>
                 {lanHosts.map(h => <option key={h} value={h}>{h}</option>)}
               </select>
@@ -348,23 +351,23 @@ export function DeviceManager({ state, api }: Props) {
           )}
           {inviteUrl ? (
             <div className="dmInviteContent">
-              <QrImage url={inviteUrl} label="Browser-Beltpack öffnen" />
+              <QrImage url={inviteUrl} label={t.dmQrAlt} />
               <div className="dmInviteRight">
-                <p style={{ fontWeight: 600, fontSize: 13, margin: "0 0 4px" }}>QR-Code scannen oder Link teilen</p>
+                <p style={{ fontWeight: 600, fontSize: 13, margin: "0 0 4px" }}>{t.dmQrTitle}</p>
                 <p className="dim" style={{ fontSize: 12, margin: "0 0 8px" }}>
-                  Jedes Gerät das diesen Link öffnet wird ein unabhängiges Beltpack. Einstellungen (Name, Kanäle, Benutzer) macht jedes Beltpack selbst.
+                  {t.dmQrDesc}
                 </p>
                 <div className="wcModalLinkRow">
                   <a href={inviteUrl} target="_blank" rel="noopener noreferrer" className="wcModalLink">{inviteUrl}</a>
                   <button className={`wcCopyBtn ${copied ? "copied" : ""}`} onClick={copyInvite}>
-                    {copied ? "Kopiert!" : "Kopieren"}
+                    {copied ? t.dmCopied : t.dmCopy}
                   </button>
                 </div>
               </div>
             </div>
           ) : (
             <p className="dim" style={{ fontSize: 12 }}>
-              ⚠ Kein QR — öffne diese Seite über die LAN-IP (z.B. https://192.168.x.x:5173) damit der Link für andere Geräte im Netzwerk erreichbar ist.
+              ⚠ {t.dmNoQr}
             </p>
           )}
         </div>
@@ -372,7 +375,7 @@ export function DeviceManager({ state, api }: Props) {
         {/* Connected beltpacks list */}
         {webClients.length > 0 && (
           <div style={{ marginTop: 12 }}>
-            <p className="dim" style={{ fontSize: 11, marginBottom: 6, textTransform: "uppercase", letterSpacing: ".05em" }}>Registrierte Beltpacks</p>
+            <p className="dim" style={{ fontSize: 11, marginBottom: 6, textTransform: "uppercase", letterSpacing: ".05em" }}>{t.dmRegistered}</p>
             {webClients.map(d => (
               <WebClientRow key={d.id} device={d} state={state} api={api} />
             ))}
