@@ -193,6 +193,23 @@ check('geaenderter Typ geht erneut hoch', hoch.planUpload([geaendert], buch).ite
 check('Serverwechsel verwirft die Upload-Staende', Object.keys(hoch.ledgerFor(JSON.parse(JSON.stringify(buch)), 'https://andere.example').records).length === 0)
 check('geloeschter Typ verliert nur seinen Eintrag', Object.keys(hoch.pruneLedger(buch, ['1']).records).join() === '1')
 
+console.log('Moderation: wartet -> live')
+const zweiTypen = [eigenerTyp('m1'), eigenerTyp('m2')]
+let mod = hoch.applyUpload(hoch.emptyLedger(S), hoch.planUpload(zweiTypen, hoch.emptyLedger(S)), [
+	{ localId: 'm1', state: 'created', slug: 'acme-m1', moderation: 'pending' },
+	{ localId: 'm2', state: 'in-sync', slug: 'acme-m2', moderation: 'approved' },
+])
+check('Moderationsstand wird je Typ gemerkt', mod.records.m1.moderation === 'pending' && mod.records.m2.moderation === 'approved')
+check('wartend wird als "pending" angezeigt', hoch.uploadStatus(zweiTypen[0], mod) === 'pending')
+check('freigegeben wird als "live" angezeigt', hoch.uploadStatus(zweiTypen[1], mod) === 'live')
+const nachfrage = hoch.planUpload(zweiTypen, mod)
+check('unveraendert, aber wartend: geht erneut mit', nachfrage.items.map((i) => i.localId).join() === 'm1')
+mod = hoch.applyUpload(mod, nachfrage, [{ localId: 'm1', state: 'in-sync', slug: 'acme-m1', moderation: 'approved' }])
+check('nach Freigabe: live, und keine weitere Nachfrage', hoch.uploadStatus(zweiTypen[0], mod) === 'live' && hoch.planUpload(zweiTypen, mod).items.length === 0)
+const alt = { server: S, records: { m1: { hash: hoch.hashOf(hoch.uploadItemOf(zweiTypen[0])), state: 'created', at: 'x' } } }
+check('alter Eintrag ohne Moderationsstand (created) fragt einmal nach', hoch.planUpload([zweiTypen[0]], alt).items.length === 1)
+check('blockiert ist nie "wartend"', !hoch.awaitsModeration({ hash: 'h', state: 'blocked', at: 'x' }))
+
 const anfragen = []
 globalThis.fetch = async (url, init) => {
 	const b = JSON.parse(init.body)

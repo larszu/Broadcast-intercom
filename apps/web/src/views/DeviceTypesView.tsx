@@ -136,10 +136,8 @@ function uploadLabel(t: Strings, s: ReturnType<typeof uploadStatus>): string {
   switch (s) {
     case "never": return t.upNever;
     case "changed": return t.upChanged;
-    case "created": return t.upCreated;
-    case "edit-proposed": return t.upEditProposed;
-    case "pending-updated": return t.upPendingUpdated;
-    case "approved": return t.upApproved;
+    case "pending": return t.upPending;
+    case "live": return t.upLive;
     case "in-sync": return t.upInSync;
     case "blocked": return t.upBlocked;
     case "error": return t.upError;
