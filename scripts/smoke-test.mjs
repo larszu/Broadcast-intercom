@@ -281,6 +281,23 @@ async function run() {
 	check("webhook test posts the line as JSON", hookTest.status === 200 && JSON.parse(hookBody ?? "{}")?.text === "Test: go");
 	check("rule can be switched off", (await api("PATCH", `/api/automation/rules/${hookRule.json?.rule?.id}`, { enabled: false })).json?.rule?.enabled === false);
 	check("rules delete", (await api("DELETE", `/api/automation/rules/${oscRule.json?.rule?.id}`)).status === 200 && (await api("DELETE", `/api/automation/rules/${hookRule.json?.rule?.id}`)).status === 200);
+	// ── Revoking a browser beltpack ──
+	const rws = await wsOpen();
+	await nextMsg(rws, (m) => m.type === "state");
+	rws.send(JSON.stringify({ type: "register_device", payload: { id: "web-smokerv", label: "Smoke Phone", transport: "wifi", channelIds: ["ch1"] } }));
+	check("browser beltpack registers", Boolean((await nextMsg(rws, (m) => m.type === "state" && m.payload?.devices?.["web-smokerv"]))));
+	check("hardware beltpack cannot be revoked", (await api("POST", "/api/devices/bp-smoke-1/revoke")).status === 400);
+	check("revoke → 200", (await api("POST", "/api/devices/web-smokerv/revoke")).status === 200);
+	let st = (await api("GET", "/api/state")).json;
+	check("revoked beltpack is gone and listed", !st?.devices?.["web-smokerv"] && (st?.revokedDeviceIds ?? []).includes("web-smokerv"));
+	rws.send(JSON.stringify({ type: "register_device", payload: { id: "web-smokerv", label: "Smoke Phone", transport: "wifi", channelIds: ["ch1"] } }));
+	await new Promise((r) => setTimeout(r, 300));
+	check("revoked beltpack is refused", !(await api("GET", "/api/state")).json?.devices?.["web-smokerv"]);
+	check("restore → 200", (await api("DELETE", "/api/devices/web-smokerv/revoke")).status === 200);
+	rws.send(JSON.stringify({ type: "register_device", payload: { id: "web-smokerv", label: "Smoke Phone", transport: "wifi", channelIds: ["ch1"] } }));
+	check("restored beltpack registers again", Boolean((await nextMsg(rws, (m) => m.type === "state" && m.payload?.devices?.["web-smokerv"]))));
+	rws.close();
+	await api("DELETE", "/api/devices/web-smokerv");
 
 	// ── Cleanup ──
 	check("DELETE device → 200", (await api("DELETE", "/api/devices/bp-smoke-1")).status === 200);

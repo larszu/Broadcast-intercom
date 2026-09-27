@@ -265,6 +265,11 @@ function WebClientRow({ device, state, api }: {
     await api("DELETE", `/api/devices/${device.id}`);
   }
 
+  async function revoke() {
+    if (!confirm(t.dmRevokeConfirm.replace("{label}", device.label))) return;
+    await api("POST", `/api/devices/${device.id}/revoke`);
+  }
+
   return (
     <div className="dmWebRow">
       <span className={`onlineDot ${online ? "on" : "off"}`} title={online ? t.dmConnected : t.dmDisconnected} />
@@ -273,6 +278,7 @@ function WebClientRow({ device, state, api }: {
       <span className="dmChannels dim">📡 {device.channelIds.map(id => state.channels[id]?.name ?? id).join(", ") || "—"}</span>
       <div className="dmActions">
         <button className="btnSmall danger" onClick={() => void remove()} title={t.dmRemoveFromListTip}>{t.dmRemove}</button>
+        <button className="btnSmall danger" onClick={() => void revoke()} title={t.dmRevokeTip}>{t.dmRevoke}</button>
       </div>
     </div>
   );
@@ -378,6 +384,20 @@ export function DeviceManager({ state, api }: Props) {
             <p className="dim" style={{ fontSize: 11, marginBottom: 6, textTransform: "uppercase", letterSpacing: ".05em" }}>{t.dmRegistered}</p>
             {webClients.map(d => (
               <WebClientRow key={d.id} device={d} state={state} api={api} />
+            ))}
+          </div>
+        )}
+
+        {(state.revokedDeviceIds ?? []).length > 0 && (
+          <div className="dmRevoked">
+            <p className="dmRevokedTitle">{t.dmRevokedTitle}</p>
+            {(state.revokedDeviceIds ?? []).map((id) => (
+              <div key={id} className="dmWebRow">
+                <strong className="dmLabel">{id}</strong>
+                <div className="dmActions">
+                  <button className="btnSmall" onClick={() => void api("DELETE", `/api/devices/${id}/revoke`)}>{t.dmRestore}</button>
+                </div>
+              </div>
             ))}
           </div>
         )}
