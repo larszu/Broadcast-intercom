@@ -67,6 +67,8 @@ Per-device audio settings and the optional VST/audio plugin bridge configuration
 ### Browser beltpack (phone / tablet)
 Open the client link on any device to turn it into an independent beltpack — pick a name and user (left), then push-to-talk with per-channel listen and live talk indicators (right).
 
+Over HTTPS (port 4443) the beltpack can be **installed on the home screen** (web app manifest, starts straight into the beltpack) and opens even while the core is unreachable — it shows *offline* and reconnects by itself; channel lists and audio are never cached. While the beltpack is open, the screen stays on (Screen Wake Lock, where the browser offers it).
+
 <p>
   <img src="docs/screenshots/07-phone-client.png" alt="Browser beltpack onboarding" width="32%">
   &nbsp;&nbsp;
