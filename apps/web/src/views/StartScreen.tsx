@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ConfigRef, CoreState } from "@broadcast/shared";
+import { useLang } from "../i18n";
 
 interface Props {
   onEnter: (state: CoreState) => void;
@@ -7,6 +8,7 @@ interface Props {
 }
 
 export function StartScreen({ onEnter, api }: Props) {
+  const { t } = useLang();
   const [configs, setConfigs] = useState<ConfigRef[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [newName, setNewName] = useState("");
@@ -32,21 +34,21 @@ export function StartScreen({ onEnter, api }: Props) {
       if (res.ok) {
         onEnter(res.state);
       } else {
-        setError(res.error || "Load failed");
+        setError(res.error || t.startLoadFailed);
       }
     } catch {
-      setError("Could not reach server");
+      setError(t.startUnreachable);
     }
   }
 
   return (
     <div className="startScreen">
       <div className="startCard">
-        <h1>Broadcast Intercom</h1>
-        <p>Browser-based intercom host for wired and web clients</p>
+        <h1>{t.startTitle}</h1>
+        <p>{t.startSubtitle}</p>
 
         <div className="startSection">
-          <h2>New configuration</h2>
+          <h2>{t.startNew}</h2>
           <div className="row">
             {/* `aria-label` und nicht nur `placeholder` (B-77). Ein
                 Platzhalter ist KEIN Name: er verschwindet, sobald jemand
@@ -57,22 +59,22 @@ export function StartScreen({ onEnter, api }: Props) {
                 Oberflaeche. */}
             <input
               type="text"
-              aria-label="Show name"
-              placeholder="Show name, e.g. main-event"
+              aria-label={t.startNewName}
+              placeholder={t.startNewPlaceholder}
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && createNew()}
             />
-            <button onClick={createNew}>Create</button>
+            <button onClick={createNew}>{t.startCreateBtn}</button>
           </div>
         </div>
 
         <div className="startSection">
           <div className="row">
-            <h2>Open existing</h2>
-            <button onClick={refresh}>Browse</button>
+            <h2>{t.startOpen}</h2>
+            <button onClick={refresh}>{t.startBrowse}</button>
           </div>
-          {loaded && configs.length === 0 && <p>No saved configs found</p>}
+          {loaded && configs.length === 0 && <p>{t.startNoConfigs}</p>}
           {loaded && configs.length > 0 && (
             <ul className="configList">
               {configs.map((c) => (

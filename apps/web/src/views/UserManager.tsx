@@ -314,10 +314,10 @@ export function UserManager({ state, api }: Props) {
                   {t.umTalk}: {user.permissions.talkChannelIds.map((id) => state.channels[id]?.name || id).join(", ") || t.umNone}<br />
                   {t.umListen}: {user.permissions.listenChannelIds.map((id) => state.channels[id]?.name || id).join(", ") || t.umNone}<br />
                   {t.umTranscription}: {user.permissions.transcriptionChannelIds.map((id) => state.channels[id]?.name || id).join(", ") || t.umNone}<br />
-                  {t.umCall}: {(user.callBehavior?.replyMode || "ptt")}
-                  {user.callBehavior?.isolate ? " · isolate" : ""}
-                  {user.callBehavior?.alertTone ? " · alertTone" : ""}
-                  {user.callBehavior?.activeTimeSec ? ` · active ${user.callBehavior.activeTimeSec}s` : ""}
+                  {t.umCall}: {t[REPLY_MODES.find((m) => m.value === (user.callBehavior?.replyMode || "ptt"))?.label ?? "umReplyPtt"]}
+                  {user.callBehavior?.isolate ? ` · ${t.umIsolateShort}` : ""}
+                  {user.callBehavior?.alertTone ? ` · ${t.umAlertShort}` : ""}
+                  {user.callBehavior?.activeTimeSec ? ` · ${t.umActiveShort.replace("{s}", String(user.callBehavior.activeTimeSec))}` : ""}
                 </small>
                 <div className="actionRow">
                   <button onClick={() => startEdit(user)}>{t.umEdit}</button>

@@ -3,6 +3,7 @@ import type { CoreState } from "@broadcast/shared";
 import { useAudioPlayback } from "../hooks/useAudioPlayback";
 import type { AudioChunkPayload } from "../hooks/useIntercomStore";
 import { downsampleToInt16, int16ToBase64, mikrofonPegel } from "../lib/audio";
+import { useLang } from "../i18n";
 
 type PttMode = "momentary" | "latching";
 const TRANSCRIPTION_SAMPLE_RATE = 16000;
@@ -40,6 +41,7 @@ interface Props {
 }
 
 export function Softclient({ state, sendWs, api, setAudioChunkHandler }: Props) {
+  const { t } = useLang();
   const clientId = useRef(localStorage.getItem("clientId") || `web-${Math.random().toString(36).slice(2, 8)}`);
   const p = loadPrefs();
 
@@ -253,7 +255,7 @@ export function Softclient({ state, sendWs, api, setAudioChunkHandler }: Props) 
       const devices = await navigator.mediaDevices.enumerateDevices();
       setAudioDevices(devices.filter((d) => d.kind === "audioinput" || d.kind === "audiooutput"));
     } catch {
-      alert("Microphone access denied");
+      alert(t.micBlocked);
     }
   }
 
@@ -413,22 +415,22 @@ export function Softclient({ state, sendWs, api, setAudioChunkHandler }: Props) 
   return (
     <div className="viewPanel softclientPanel">
       <div className="softclientHeader">
-        <h2>Web Client Settings</h2>
+        <h2>{t.softTitle}</h2>
         <code className="clientIdBadge">{clientId.current}</code>
-        <button onClick={() => window.open(`${window.location.origin}?mode=client`, "_blank", "noopener,noreferrer")}>Open Web Client</button>
+        <button onClick={() => window.open(`${window.location.origin}?mode=client`, "_blank", "noopener,noreferrer")}>{t.softOpenWebClient}</button>
       </div>
 
       {/* ── Audio setup ── */}
       <section className="softSection">
-        <h3>Audio</h3>
+        <h3>{t.softMicSection}</h3>
         <div className="softAudioRow">
           {!stream
-            ? <button onClick={requestAudio}>Enable microphone</button>
-            : <button className="btnDanger" onClick={stopAudio}>Release microphone</button>
+            ? <button onClick={requestAudio}>{t.enableMic}</button>
+            : <button className="btnDanger" onClick={stopAudio}>{t.softReleaseMic}</button>
           }
           {stream && (
             <div className="micMeter">
-              <span>Mic</span>
+              <span>{t.softMic}</span>
               <div className="meterTrack">
                 <div className="meterFill" style={{ width: `${micLevel}%`, background: micColor }} />
               </div>
@@ -438,23 +440,23 @@ export function Softclient({ state, sendWs, api, setAudioChunkHandler }: Props) 
         </div>
         {audioDevices.length > 0 && (
           <div className="deviceSelects">
-            <label>Input
+            <label>{t.audioInput}
               <select value={inputDevice} onChange={(e) => setInputDevice(e.target.value)}>
-                <option value="">Default</option>
+                <option value="">{t.audioDefault}</option>
                 {audioDevices.filter((d) => d.kind === "audioinput").map((d) => (
                   <option key={d.deviceId} value={d.deviceId}>{d.label || d.deviceId}</option>
                 ))}
               </select>
             </label>
-            <label>Output
+            <label>{t.audioOutput}
               <select value={outputDevice} onChange={(e) => setOutputDevice(e.target.value)}>
-                <option value="">Default</option>
+                <option value="">{t.audioDefault}</option>
                 {audioDevices.filter((d) => d.kind === "audiooutput").map((d) => (
                   <option key={d.deviceId} value={d.deviceId}>{d.label || d.deviceId}</option>
                 ))}
               </select>
             </label>
-            <label>Master vol
+            <label>{t.softMasterVolume}
               <input type="range" min={0} max={100} value={masterVolume}
                 onChange={(e) => setMasterVolume(+e.target.value)} />
               <span>{masterVolume}%</span>
@@ -465,44 +467,44 @@ export function Softclient({ state, sendWs, api, setAudioChunkHandler }: Props) 
 
       {/* ── Settings ── */}
       <section className="softSection">
-        <h3>Settings</h3>
+        <h3>{t.settings}</h3>
         <div className="settingsRow">
-          <label>PTT Mode
+          <label>{t.softPttMode}
             <select value={pttMode} onChange={(e) => setPttMode(e.target.value as PttMode)}>
-              <option value="momentary">Momentary (hold)</option>
-              <option value="latching">Latching (toggle)</option>
+              <option value="momentary">{t.softPttMomentary}</option>
+              <option value="latching">{t.softPttLatching}</option>
             </select>
           </label>
           <label className="checkLabel">
             <input type="checkbox" checked={voxEnabled} onChange={(e) => setVoxEnabled(e.target.checked)} />
-            VOX (auto-talk on listened channels)
+            {t.softVox}
           </label>
           {voxEnabled && (
-            <label>VOX threshold
+            <label>{t.softVoxThreshold}
               <input type="range" min={0} max={100} value={voxThreshold}
                 onChange={(e) => setVoxThreshold(+e.target.value)} />
               <span>{voxThreshold}%</span>
             </label>
           )}
         </div>
-        <p className="softHint">⌨ Space = PTT on active channel · 1–9 = select channel</p>
-        <p className="softHint">📝 Vosk transcribes only channels selected per strip while mic is enabled.</p>
+        <p className="softHint">⌨ {t.softKeysHint}</p>
+        <p className="softHint">📝 {t.softTranscribeHint}</p>
       </section>
 
       <section className="softSection">
-        <h3>Mic Processing</h3>
+        <h3>{t.softMicProcessing}</h3>
         <div className="settingsRow">
           <label className="checkLabel">
             <input type="checkbox" checked={compressionEnabled} onChange={(e) => setCompressionEnabled(e.target.checked)} />
-            Compressor
+            {t.softCompressor}
           </label>
           <label>
-            Threshold
+            {t.softThreshold}
             <input type="range" min={-60} max={0} value={compressorThreshold} onChange={(e) => setCompressorThreshold(+e.target.value)} />
             <span>{compressorThreshold} dB</span>
           </label>
           <label>
-            Ratio
+            {t.softRatio}
             <input type="range" min={1} max={12} value={compressorRatio} onChange={(e) => setCompressorRatio(+e.target.value)} />
             <span>{compressorRatio}:1</span>
           </label>
@@ -510,10 +512,10 @@ export function Softclient({ state, sendWs, api, setAudioChunkHandler }: Props) 
         <div className="settingsRow">
           <label className="checkLabel">
             <input type="checkbox" checked={limiterEnabled} onChange={(e) => setLimiterEnabled(e.target.checked)} />
-            Limiter
+            {t.audioLimiter}
           </label>
           <label>
-            Ceiling
+            {t.softCeiling}
             <input type="range" min={-12} max={0} value={limiterThreshold} onChange={(e) => setLimiterThreshold(+e.target.value)} />
             <span>{limiterThreshold} dB</span>
           </label>
@@ -521,45 +523,45 @@ export function Softclient({ state, sendWs, api, setAudioChunkHandler }: Props) 
       </section>
 
       <section className="softSection">
-        <h3>VST Bridge (Interface)</h3>
+        <h3>{t.softVstTitle}</h3>
         <div className="settingsRow">
           <label className="checkLabel">
             <input type="checkbox" checked={vstBridgeEnabled} onChange={(e) => setVstBridgeEnabled(e.target.checked)} />
-            Enable external plugin host bridge
+            {t.softVstEnable}
           </label>
         </div>
         <div className="deviceSelects">
-          <label>Bridge host
+          <label>{t.softVstHost}
             <input value={vstBridgeHost} onChange={(e) => setVstBridgeHost(e.target.value)} placeholder="ws://127.0.0.1:39000" />
           </label>
         </div>
-        <label className="vstPathLabel">Plugin paths (one per line)
+        <label className="vstPathLabel">{t.softVstPaths}
           <textarea value={vstPluginPaths} onChange={(e) => setVstPluginPaths(e.target.value)} rows={4} />
         </label>
         <div className="settingsRow">
-          <button onClick={savePluginBridge} disabled={savingBridge}>{savingBridge ? "Saving..." : "Save plugin bridge"}</button>
+          <button onClick={savePluginBridge} disabled={savingBridge}>{savingBridge ? t.softSaving : t.softVstSave}</button>
         </div>
-        <p className="softHint">This is a host interface only. Actual VST processing runs in an external plugin host process.</p>
+        <p className="softHint">{t.softVstHint}</p>
       </section>
 
       {/* ── Channel strip ── */}
       <section className="softSection">
         <div className="softChHeader">
-          <h3>Channels</h3>
+          <h3>{t.softChannelsSection}</h3>
           <div className="softChActions">
-            <button className="btnPage" onClick={pageAll} title="Broadcast to ALL channels">
-              📢 Page All
+            <button className="btnPage" onClick={pageAll} title={t.softPageAllTip}>
+              📢 {t.softTalkAll}
             </button>
             {talkChannels.size > 0 && (
-              <button className="btnRelease" onClick={releaseAll} title="Release all active talks">
-                ✕ Unlatch All ({talkChannels.size})
+              <button className="btnRelease" onClick={releaseAll} title={t.softReleaseAllTip}>
+                ✕ {t.softReleaseAll} ({talkChannels.size})
               </button>
             )}
           </div>
         </div>
 
         <div className="channelStrips">
-          {channels.length === 0 && <p className="softHint">No channels configured.</p>}
+          {channels.length === 0 && <p className="softHint">{t.softNoChannels}</p>}
           {channels.map((ch, idx) => {
             const isTalking = talkChannels.has(ch.id);
             const isListening = listenChannels.has(ch.id);
@@ -582,9 +584,9 @@ export function Softclient({ state, sendWs, api, setAudioChunkHandler }: Props) 
                 <span className="stripIndex">{idx < 9 ? idx + 1 : "—"}</span>
                 <span className="stripName">{ch.name}</span>
 
-                <span className={`tallyDot ${isTalking || isNetworkLive ? "tallyLive" : ""}`} title={isTalking || isNetworkLive ? "ON AIR" : "Off"} />
+                <span className={`tallyDot ${isTalking || isNetworkLive ? "tallyLive" : ""}`} title={isTalking || isNetworkLive ? t.softOnAir : t.softOff} />
 
-                {isNetworkLive && <span className="liveInfo">Live: {speakerPreview}{speakerOverflow}</span>}
+                {isNetworkLive && <span className="liveInfo">{t.liveLabel}: {speakerPreview}{speakerOverflow}</span>}
 
                 <button
                   className={`pttBtn ${isTalking ? "pttActive" : ""}`}
@@ -593,19 +595,19 @@ export function Softclient({ state, sendWs, api, setAudioChunkHandler }: Props) 
                   onMouseLeave={() => stopTalk(ch.id)}
                   onTouchStart={(e) => { e.stopPropagation(); startTalk(ch.id); }}
                   onTouchEnd={(e) => { e.stopPropagation(); stopTalk(ch.id); }}
-                  title={pttMode === "momentary" ? "Hold to talk" : "Click to toggle talk"}
+                  title={pttMode === "momentary" ? t.holdToTalk : t.softClickToTalk}
                 >
-                  {isTalking ? "🔴 LIVE" : "🎙 PTT"}
+                  {isTalking ? `🔴 ${t.liveTalk}` : "🎙 PTT"}
                 </button>
 
                 <label className="listenToggle" onClick={(e) => e.stopPropagation()}>
                   <input type="checkbox" checked={isListening} onChange={() => toggleListen(ch.id)} />
-                  Listen
+                  {t.listen}
                 </label>
 
                 <label className="listenToggle" onClick={(e) => e.stopPropagation()}>
                   <input type="checkbox" checked={isTranscribed} onChange={() => toggleTranscriptionChannel(ch.id)} />
-                  Transcribe
+                  {t.softTranscribe}
                 </label>
 
                 {isListening && (
@@ -616,7 +618,7 @@ export function Softclient({ state, sendWs, api, setAudioChunkHandler }: Props) 
                   </label>
                 )}
 
-                {isAlert && <span className="callAlert">📞 CALL</span>}
+                {isAlert && <span className="callAlert">📞 {t.softCall}</span>}
               </div>
             );
           })}
@@ -624,7 +626,7 @@ export function Softclient({ state, sendWs, api, setAudioChunkHandler }: Props) 
       </section>
 
       <section className="softSection">
-        <h3>Live Transcript</h3>
+        <h3>{t.softTranscriptsSection}</h3>
         <div className="transcriptLog">
           {transcriptEvents.map((e) => (
             <div className="transcriptItem" key={e.id}>
@@ -632,7 +634,7 @@ export function Softclient({ state, sendWs, api, setAudioChunkHandler }: Props) 
               <span>{e.message}</span>
             </div>
           ))}
-          {transcriptEvents.length === 0 && <p className="softHint">No transcript lines yet.</p>}
+          {transcriptEvents.length === 0 && <p className="softHint">{t.softNoTranscripts}</p>}
         </div>
       </section>
     </div>

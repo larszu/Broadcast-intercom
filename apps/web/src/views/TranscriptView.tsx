@@ -152,7 +152,7 @@ export function TranscriptView({ state, api, compact = false }: Props) {
         </div>
         <p className="transcriptLangHint">{t.transcriptLangHint}</p>
         <div className="transcriptModelRow">
-          <span>{status?.installed ? "✅ Model installed" : "⚠️ Model not installed"}</span>
+          <span>{status?.installed ? `✅ ${t.transcriptModelInstalled}` : `⚠️ ${t.transcriptModelMissing}`}</span>
           {status?.modelPath && <span className="dim">{status.modelPath}</span>}
           {status?.disabledReason && <span className="statusWarn">{status.disabledReason}</span>}
           <button onClick={() => void installModel()} disabled={installing} className="btnSmall">
@@ -179,7 +179,7 @@ export function TranscriptView({ state, api, compact = false }: Props) {
       {/* Search */}
       <div className="transcriptFilters">
         <input
-          placeholder="Search transcripts…"
+          placeholder={t.transcriptSearch}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="searchInput"

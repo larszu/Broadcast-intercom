@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { AudioSettings, BeltpackDevice, CoreState } from "@broadcast/shared";
+import { useLang } from "../i18n";
 
 interface Props {
   state: CoreState;
@@ -21,6 +22,7 @@ function Slider({ label, min, max, step, value, onChange }: {
 }
 
 function DeviceAudio({ device, api }: { device: BeltpackDevice; api: Props["api"] }) {
+  const { t } = useLang();
   const [open, setOpen] = useState(false);
   const [audio, setAudio] = useState<AudioSettings>(device.audio);
   const [dirty, setDirty] = useState(false);
@@ -44,24 +46,24 @@ function DeviceAudio({ device, api }: { device: BeltpackDevice; api: Props["api"
       </div>
       {open && (
         <div className="audioCardBody">
-          <Slider label="Input gain" min={-30} max={30} step={1}
+          <Slider label={t.audioInputGain} min={-30} max={30} step={1}
             value={audio.inputGainDb} onChange={(v) => update({ inputGainDb: v })} />
-          <Slider label="Output gain" min={-30} max={30} step={1}
+          <Slider label={t.audioOutputGain} min={-30} max={30} step={1}
             value={audio.outputGainDb} onChange={(v) => update({ outputGainDb: v })} />
           <label className="sliderRow">
-            <span>Sidetone</span>
+            <span>{t.audioSidetone}</span>
             <input type="range" min={0} max={100} step={1} value={audio.sidetonePercent}
               onChange={(e) => update({ sidetonePercent: parseInt(e.target.value) })} />
             <span className="sliderVal">{audio.sidetonePercent}%</span>
           </label>
-          <Slider label="Noise gate" min={-80} max={0} step={1}
+          <Slider label={t.audioNoiseGate} min={-80} max={0} step={1}
             value={audio.noiseGateDb} onChange={(v) => update({ noiseGateDb: v })} />
           <label className="checkRow">
             <input type="checkbox" checked={audio.limiterEnabled}
               onChange={(e) => update({ limiterEnabled: e.target.checked })} />
-            Limiter enabled
+            {t.audioLimiter}
           </label>
-          <button disabled={!dirty} onClick={save}>{dirty ? "Save changes" : "Saved"}</button>
+          <button disabled={!dirty} onClick={save}>{dirty ? t.audioSaveBtn : t.audioSaved}</button>
         </div>
       )}
     </div>
@@ -69,11 +71,12 @@ function DeviceAudio({ device, api }: { device: BeltpackDevice; api: Props["api"
 }
 
 export function AudioSettings({ state, api }: Props) {
+  const { t } = useLang();
   const devices = Object.values(state.devices) as BeltpackDevice[];
   return (
     <div className="viewPanel">
-      <h2>Audio Settings</h2>
-      {devices.length === 0 && <p>No devices configured.</p>}
+      <h2>{t.audioTitle}</h2>
+      {devices.length === 0 && <p>{t.audioNoDevices}</p>}
       {devices.map((d) => <DeviceAudio key={d.id} device={d} api={api} />)}
     </div>
   );

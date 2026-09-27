@@ -1,4 +1,5 @@
 import type { BeltpackDevice, Channel, CoreState, MatrixRoute } from "@broadcast/shared";
+import { useLang } from "../i18n";
 
 interface Props {
   state: CoreState;
@@ -6,6 +7,7 @@ interface Props {
 }
 
 export function MatrixView({ state, api }: Props) {
+  const { t } = useLang();
   const devices = Object.values(state.devices) as BeltpackDevice[];
   const channels = Object.values(state.channels) as Channel[];
   const routes = state.matrixRoutes;
@@ -28,22 +30,22 @@ export function MatrixView({ state, api }: Props) {
   if (devices.length === 0 || channels.length === 0) {
     return (
       <div className="viewPanel">
-        <h2>Matrix Routing</h2>
-        <p>Add devices and channels first.</p>
+        <h2>{t.matrixTitle}</h2>
+        <p>{t.matrixEmpty}</p>
       </div>
     );
   }
 
   return (
     <div className="viewPanel">
-      <h2>Matrix Routing</h2>
-      <p>Each cell enables talk-routing from a source device to a destination device on a specific channel.</p>
+      <h2>{t.matrixTitle}</h2>
+      <p>{t.matrixHint}</p>
 
       <div className="matrixScroll">
         <table className="matrixTable">
           <thead>
             <tr>
-              <th>From \ To</th>
+              <th>{t.matrixFromTo}</th>
               {devices.map((d) => (
                 channels.map((ch) => (
                   <th key={`${d.id}-${ch.id}`} title={`${d.label} / ${ch.name}`}>
@@ -70,7 +72,7 @@ export function MatrixView({ state, api }: Props) {
                         key={`${from.id}-${to.id}-${ch.id}`}
                         className={`matrixCell ${active ? "on" : ""} ${self ? "self" : ""}`}
                         onClick={() => !self && toggle(from.id, to.id, ch.id, active)}
-                        title={self ? "Self" : `${from.label} → ${to.label} on ${ch.name}`}
+                        title={self ? t.matrixSelf : t.matrixCellTip.replace("{from}", from.label).replace("{to}", to.label).replace("{channel}", ch.name)}
                       >
                         {self ? "—" : active ? "✓" : ""}
                       </td>
