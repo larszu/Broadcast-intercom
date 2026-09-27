@@ -8,6 +8,7 @@ import type {
   UserRole,
 } from "@broadcast/shared";
 import { defaultCallBehavior } from "@broadcast/shared";
+import { useLang, type Strings } from "../i18n";
 
 interface Props {
   state: CoreState;
@@ -16,17 +17,17 @@ interface Props {
 
 const USER_ROLES: UserRole[] = ["admin", "director", "operator", "talent"];
 
-const REPLY_MODES: { value: ReplyMode; label: string }[] = [
-  { value: "ptt", label: "Momentary (PTT)" },
-  { value: "latch", label: "Rastend (Latch)" },
-  { value: "handsfree", label: "Handsfree" },
+const REPLY_MODES: { value: ReplyMode; label: keyof Strings }[] = [
+  { value: "ptt", label: "umReplyPtt" },
+  { value: "latch", label: "umReplyLatch" },
+  { value: "handsfree", label: "umReplyHandsfree" },
 ];
 
-const POPUP_MODES: { value: PopupMode; label: string }[] = [
-  { value: "off", label: "Aus" },
-  { value: "call", label: "Nur Direktruf" },
-  { value: "talk", label: "Nur Talk" },
-  { value: "all", label: "Alle" },
+const POPUP_MODES: { value: PopupMode; label: keyof Strings }[] = [
+  { value: "off", label: "umPopupOff" },
+  { value: "call", label: "umPopupCall" },
+  { value: "talk", label: "umPopupTalk" },
+  { value: "all", label: "umPopupAll" },
 ];
 
 function toggleInList(list: string[], id: string): string[] {
@@ -34,6 +35,7 @@ function toggleInList(list: string[], id: string): string[] {
 }
 
 export function UserManager({ state, api }: Props) {
+  const { t } = useLang();
   const users = Object.values(state.users);
   const channels = Object.values(state.channels);
 
@@ -88,7 +90,7 @@ export function UserManager({ state, api }: Props) {
   }
 
   async function removeUser(user: IntercomUser) {
-    if (!confirm(`User ${user.name} wirklich entfernen?`)) {
+    if (!confirm(t.umRemoveConfirm.replace("{name}", user.name))) {
       return;
     }
     await api("DELETE", `/api/users/${user.id}`);
@@ -109,23 +111,23 @@ export function UserManager({ state, api }: Props) {
 
   return (
     <div className="viewPanel">
-      <h2>Users & Permissions</h2>
-      <p className="inlineHint">Web-Clients und Handys werden wie Beltpacks behandelt und bekommen ihre Rechte ueber den zugewiesenen User.</p>
+      <h2>{t.umTitle}</h2>
+      <p className="inlineHint">{t.umHint}</p>
 
       <div className="addRow">
         <input
           data-fuehrung="user-name"
-          placeholder="Neuer Benutzername"
+          placeholder={t.umNewName}
           value={createName}
           onChange={(event) => setCreateName(event.target.value)}
         />
-        <label data-fuehrung="user-rolle">
-          Rolle
+        <label data-fuehrung="user-role">
+          {t.umRole}
           <select value={createRole} onChange={(event) => setCreateRole(event.target.value as UserRole)}>
             {USER_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
           </select>
         </label>
-        <button data-fuehrung="user-anlegen" onClick={addUser}>User anlegen</button>
+        <button data-fuehrung="user-create" onClick={addUser}>{t.umCreate}</button>
       </div>
 
       <div className="deviceTable">
@@ -133,17 +135,17 @@ export function UserManager({ state, api }: Props) {
           <div className="deviceRow" key={user.id}>
             {editId === user.id ? (
               <div className="deviceEdit">
-                <label>Name<input value={editName} onChange={(event) => setEditName(event.target.value)} /></label>
+                <label>{t.umName}<input value={editName} onChange={(event) => setEditName(event.target.value)} /></label>
                 <label>
-                  Rolle
+                  {t.umRole}
                   <select value={editRole} onChange={(event) => setEditRole(event.target.value as UserRole)}>
                     {USER_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
                   </select>
                 </label>
-                <label>Farbe<input type="color" value={editColor} onChange={(event) => setEditColor(event.target.value)} /></label>
+                <label>{t.umColor}<input type="color" value={editColor} onChange={(event) => setEditColor(event.target.value)} /></label>
 
                 <div className="editSection">
-                  <p>Talk Channels</p>
+                  <p>{t.umTalkChannels}</p>
                   <div className="checkGrid">
                     {channels.map((channel) => (
                       <label key={channel.id}>
@@ -159,7 +161,7 @@ export function UserManager({ state, api }: Props) {
                 </div>
 
                 <div className="editSection">
-                  <p>Listen Channels</p>
+                  <p>{t.umListenChannels}</p>
                   <div className="checkGrid">
                     {channels.map((channel) => (
                       <label key={channel.id}>
@@ -175,7 +177,7 @@ export function UserManager({ state, api }: Props) {
                 </div>
 
                 <div className="editSection">
-                  <p>Transcription Channels</p>
+                  <p>{t.umTrxChannels}</p>
                   <div className="checkGrid">
                     {channels.map((channel) => (
                       <label key={channel.id}>
@@ -197,7 +199,7 @@ export function UserManager({ state, api }: Props) {
                       checked={editCanAllCall}
                       onChange={(event) => setEditCanAllCall(event.target.checked)}
                     />
-                    All Call erlaubt
+                    {t.umAllCall}
                   </label>
                   <label>
                     <input
@@ -205,37 +207,37 @@ export function UserManager({ state, api }: Props) {
                       checked={editCanManageDevices}
                       onChange={(event) => setEditCanManageDevices(event.target.checked)}
                     />
-                    Darf Devices verwalten
+                    {t.umManageDevices}
                   </label>
                 </div>
 
                 <div className="editSection">
-                  <p>Advanced Call Behavior</p>
+                  <p>{t.umAdvanced}</p>
                   <div className="callBehaviorGrid">
                     <label>
-                      Reply-Modus
+                      {t.umReplyMode}
                       <select
                         value={editCallBehavior.replyMode}
                         onChange={(event) => patchCallBehavior({ replyMode: event.target.value as ReplyMode })}
                       >
                         {REPLY_MODES.map((mode) => (
-                          <option key={mode.value} value={mode.value}>{mode.label}</option>
+                          <option key={mode.value} value={mode.value}>{t[mode.label]}</option>
                         ))}
                       </select>
                     </label>
                     <label>
-                      Popup-Modus
+                      {t.umPopupMode}
                       <select
                         value={editCallBehavior.popupMode}
                         onChange={(event) => patchCallBehavior({ popupMode: event.target.value as PopupMode })}
                       >
                         {POPUP_MODES.map((mode) => (
-                          <option key={mode.value} value={mode.value}>{mode.label}</option>
+                          <option key={mode.value} value={mode.value}>{t[mode.label]}</option>
                         ))}
                       </select>
                     </label>
                     <label>
-                      Priority Dim (dB)
+                      {t.umPriorityDim}
                       <input
                         type="number"
                         min={-60}
@@ -245,7 +247,7 @@ export function UserManager({ state, api }: Props) {
                       />
                     </label>
                     <label>
-                      Ton-Pegel (dB)
+                      {t.umToneLevel}
                       <input
                         type="number"
                         min={-60}
@@ -255,7 +257,7 @@ export function UserManager({ state, api }: Props) {
                       />
                     </label>
                     <label>
-                      Cue-Timeout (s)
+                      {t.umCueTimeout}
                       <input
                         type="number"
                         min={0}
@@ -265,7 +267,7 @@ export function UserManager({ state, api }: Props) {
                       />
                     </label>
                     <label>
-                      Active-Time (s, 0 = aus)
+                      {t.umActiveTime}
                       <input
                         type="number"
                         min={0}
@@ -282,7 +284,7 @@ export function UserManager({ state, api }: Props) {
                         checked={editCallBehavior.isolate}
                         onChange={(event) => patchCallBehavior({ isolate: event.target.checked })}
                       />
-                      Isolate (Solo)
+                      {t.umIsolate}
                     </label>
                     <label>
                       <input
@@ -290,14 +292,14 @@ export function UserManager({ state, api }: Props) {
                         checked={editCallBehavior.alertTone}
                         onChange={(event) => patchCallBehavior({ alertTone: event.target.checked })}
                       />
-                      Alarmton bei Ruf
+                      {t.umAlertTone}
                     </label>
                   </div>
                 </div>
 
                 <div className="actionRow">
-                  <button onClick={() => saveUser(user.id)}>Save</button>
-                  <button onClick={() => setEditId(null)}>Cancel</button>
+                  <button onClick={() => saveUser(user.id)}>{t.umSave}</button>
+                  <button onClick={() => setEditId(null)}>{t.umCancel}</button>
                 </div>
               </div>
             ) : (
@@ -308,18 +310,18 @@ export function UserManager({ state, api }: Props) {
                   <small>{user.id}</small>
                 </div>
                 <small>
-                  Assigned: {user.assignedDeviceIds.length > 0 ? user.assignedDeviceIds.join(", ") : "none"}<br />
-                  Talk: {user.permissions.talkChannelIds.map((id) => state.channels[id]?.name || id).join(", ") || "none"}<br />
-                  Listen: {user.permissions.listenChannelIds.map((id) => state.channels[id]?.name || id).join(", ") || "none"}<br />
-                  Transcription: {user.permissions.transcriptionChannelIds.map((id) => state.channels[id]?.name || id).join(", ") || "none"}<br />
-                  Call: {(user.callBehavior?.replyMode || "ptt")}
+                  {t.umAssigned}: {user.assignedDeviceIds.length > 0 ? user.assignedDeviceIds.join(", ") : t.umNone}<br />
+                  {t.umTalk}: {user.permissions.talkChannelIds.map((id) => state.channels[id]?.name || id).join(", ") || t.umNone}<br />
+                  {t.umListen}: {user.permissions.listenChannelIds.map((id) => state.channels[id]?.name || id).join(", ") || t.umNone}<br />
+                  {t.umTranscription}: {user.permissions.transcriptionChannelIds.map((id) => state.channels[id]?.name || id).join(", ") || t.umNone}<br />
+                  {t.umCall}: {(user.callBehavior?.replyMode || "ptt")}
                   {user.callBehavior?.isolate ? " · isolate" : ""}
                   {user.callBehavior?.alertTone ? " · alertTone" : ""}
                   {user.callBehavior?.activeTimeSec ? ` · active ${user.callBehavior.activeTimeSec}s` : ""}
                 </small>
                 <div className="actionRow">
-                  <button onClick={() => startEdit(user)}>Edit</button>
-                  <button onClick={() => removeUser(user)}>Remove</button>
+                  <button onClick={() => startEdit(user)}>{t.umEdit}</button>
+                  <button onClick={() => removeUser(user)}>{t.umRemove}</button>
                 </div>
               </div>
             )}

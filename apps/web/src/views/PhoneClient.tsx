@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CoreState } from "@broadcast/shared";
-import { useLang } from "../i18n";
+import { useLang, type Strings } from "../i18n";
 import { PttSlider } from "./PttSlider";
 import { useAudioPlayback } from "../hooks/useAudioPlayback";
 import type { AudioChunkPayload } from "../hooks/useIntercomStore";
@@ -8,24 +8,24 @@ import { downsampleToInt16, int16ToBase64, mikrofonPegel } from "../lib/audio";
 
 const TRANSCRIPTION_SAMPLE_RATE = 16000;
 
-function describeMicError(error: unknown): string {
+function describeMicError(error: unknown, t: Strings): string {
   if (error && typeof error === "object" && "name" in error) {
     const name = String(error.name);
     if (name === "NotAllowedError" || name === "PermissionDeniedError") {
-      return "Mikrofonzugriff wurde im Browser blockiert. Erlaube das Mikrofon in der Browser-Leiste und tippe danach erneut auf den Button.";
+      return t.micBlocked;
     }
     if (name === "NotFoundError" || name === "DevicesNotFoundError") {
-      return "Es wurde kein Mikrofon gefunden.";
+      return t.micNotFound;
     }
     if (name === "NotReadableError" || name === "TrackStartError") {
-      return "Das Mikrofon wird bereits von einer anderen App oder einem anderen Tab verwendet.";
+      return t.micBusy;
     }
     if (name === "SecurityError") {
-      return "Der Browser blockiert das Mikrofon in diesem Kontext. Auf dem Handy brauchst du HTTPS oder localhost.";
+      return t.micInsecure;
     }
   }
 
-  return "Mikrofonzugriff konnte nicht gestartet werden.";
+  return t.micFailed;
 }
 
 interface Props {
@@ -247,7 +247,7 @@ export function PhoneClient({ state, sendWs, connected, setAudioChunkHandler }: 
 
   async function requestAudio(deviceId = inputDevice) {
     if (!navigator.mediaDevices?.getUserMedia) {
-      setMicError("Dieser Browser stellt auf dieser URL keinen Mikrofonzugriff bereit. Das ist haeufig bei normalem HTTP statt HTTPS der Fall, ausser auf localhost.");
+      setMicError(t.micUnavailable);
       return false;
     }
 
@@ -325,7 +325,7 @@ export function PhoneClient({ state, sendWs, connected, setAudioChunkHandler }: 
           console.debug(`[PhoneClient.processor] Sent audio: ${pcm.length} samples (~${Math.round((payload.audio.length / 1024))} KB base64) to channel ${channelId}`);
         } catch (err) {
           console.error(`[PhoneClient.processor] Failed to send transcribe_audio:`, err);
-          setMicError(`Fehler beim Audioversand: ${err instanceof Error ? err.message : "Unbekannt"}`);
+          setMicError(t.micSendFailed.replace("{reason}", err instanceof Error ? err.message : t.micUnknown));
         }
       };
 
@@ -347,7 +347,7 @@ export function PhoneClient({ state, sendWs, connected, setAudioChunkHandler }: 
       return true;
     } catch (error) {
       setPermissionState("denied");
-      setMicError(describeMicError(error));
+      setMicError(describeMicError(error, t));
       return false;
     }
   }
@@ -531,7 +531,7 @@ export function PhoneClient({ state, sendWs, connected, setAudioChunkHandler }: 
                   href={`https://${window.location.hostname}:${tlsPort}${window.location.pathname}${window.location.search}`}
                   className="phoneBannerLink"
                 >
-                  Jetzt dorthin wechseln
+                  {t.micSwitchNow}
                 </a>
               </>
             )}

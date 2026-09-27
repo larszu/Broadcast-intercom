@@ -42,6 +42,7 @@ function FileBrowserModal({ onSelect, onClose, api }: {
   onClose: () => void;
   api: Props["api"];
 }) {
+  const { t } = useLang();
   const [listing, setListing] = useState<FsListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [manualPath, setManualPath] = useState("");
@@ -71,7 +72,7 @@ function FileBrowserModal({ onSelect, onClose, api }: {
     <div className="wcModalOverlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="wcModal" style={{ maxWidth: 520 }}>
         <div className="wcModalHeader">
-          <span className="wcModalTitle">Plugin-Datei auswählen</span>
+          <span className="wcModalTitle">{t.pbPickFile}</span>
           <button className="btnGhost wcModalClose" onClick={onClose}>✕</button>
         </div>
         <div className="wcModalBody" style={{ gap: 8 }}>
@@ -83,20 +84,20 @@ function FileBrowserModal({ onSelect, onClose, api }: {
               value={manualPath}
               onChange={(e) => setManualPath(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") void loadPath(manualPath); }}
-              placeholder="Pfad eingeben…"
+              placeholder={t.pbPathPlaceholder}
             />
-            <button className="wcCopyBtn" onClick={() => void loadPath(manualPath)}>Navigieren</button>
+            <button className="wcCopyBtn" onClick={() => void loadPath(manualPath)}>{t.pbNavigate}</button>
           </div>
 
           {/* Up button */}
           {listing?.parent && (
-            <button className="btnSmall" onClick={() => void loadPath(listing.parent!)}>↑ Übergeordnet</button>
+            <button className="btnSmall" onClick={() => void loadPath(listing.parent!)}>{t.pbUp}</button>
           )}
 
           {/* Directory listing */}
           <div className="fbListing">
-            {loading && <p className="dim">Lädt…</p>}
-            {!loading && listing?.entries.length === 0 && <p className="dim">Leer</p>}
+            {loading && <p className="dim">{t.pbLoading}</p>}
+            {!loading && listing?.entries.length === 0 && <p className="dim">{t.pbEmpty}</p>}
             {!loading && listing?.entries.map((e) => (
               <div
                 key={e.path}
@@ -107,7 +108,7 @@ function FileBrowserModal({ onSelect, onClose, api }: {
                 <span className="fbEntryName">{e.name}</span>
                 {e.isPlugin && (
                   <span className="fbEntryAdd" onClick={(ev) => { ev.stopPropagation(); onSelect(e.path); }}>
-                    + Hinzufügen
+                    {t.pbAdd}
                   </span>
                 )}
                 {/* Der Weg ins Buendel bleibt erreichbar, nur nicht mehr als
@@ -116,10 +117,10 @@ function FileBrowserModal({ onSelect, onClose, api }: {
                 {e.isPlugin && e.isDir && (
                   <span
                     className="fbEntryOpen"
-                    title="In das Plugin-Bündel hineinsehen"
+                    title={t.pbLookInside}
                     onClick={(ev) => { ev.stopPropagation(); void loadPath(e.path); }}
                   >
-                    ↳ öffnen
+                    {t.pbOpen}
                   </span>
                 )}
               </div>
@@ -127,7 +128,7 @@ function FileBrowserModal({ onSelect, onClose, api }: {
           </div>
         </div>
         <div className="wcModalFooter">
-          <button onClick={onClose}>Abbrechen</button>
+          <button onClick={onClose}>{t.pbCancel}</button>
         </div>
       </div>
     </div>
@@ -173,7 +174,7 @@ export function PluginBridgeSettings({ api }: Props) {
     void save({ ...config, pluginPaths: config.pluginPaths.filter((x) => x !== p) });
   }
 
-  if (loading) return <div className="softSection"><p className="dim">Lädt…</p></div>;
+  if (loading) return <div className="softSection"><p className="dim">{t.pbLoading}</p></div>;
 
   return (
     <>
@@ -235,10 +236,10 @@ export function PluginBridgeSettings({ api }: Props) {
         <div className="settingsRow" style={{ flexDirection: "column", alignItems: "flex-start", gap: 6 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%" }}>
             <label>{t.pluginPaths}</label>
-            <button className="btnSmall" onClick={() => setShowBrowser(true)}>+ Durchsuchen…</button>
+            <button className="btnSmall" onClick={() => setShowBrowser(true)}>{t.pbBrowse}</button>
           </div>
           {config.pluginPaths.length === 0 && (
-            <p className="dim" style={{ fontSize: 12 }}>Noch keine Plugin-Pfade hinzugefügt.</p>
+            <p className="dim" style={{ fontSize: 12 }}>{t.pbNoPaths}</p>
           )}
           <div className="pluginPathList">
             {config.pluginPaths.map((p) => (

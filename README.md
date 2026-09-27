@@ -288,6 +288,7 @@ direct-call temporary channels).
 The device library connection is checked without a server or browser:
 
 ```bash
+npm run lang:check          # UI text comes from i18n.tsx (source language en, German translation)
 npm run library:check       # facet round trip, no project data, sync, upload + change detection, token handling
 ```
 
