@@ -460,6 +460,12 @@ export interface CoreState {
   pluginBridge: PluginBridgeConfig;
   /** Keyword rules on transcript lines (optional: older configs lack it). */
   keywordRules?: KeywordRule[];
+  /**
+   * Browser beltpacks the admin has revoked: they may not register again
+   * until restored. An operator control, not access control — the core has
+   * no authentication, and a phone that forgets its id comes back as new.
+   */
+  revokedDeviceIds?: string[];
   /** Gerätepräsenz (online/offline) — dynamisch, nicht in Config gespeichert */
   presence?: Record<string, { online: boolean; lastSeenAt: number }>;
   events: EventItem[];

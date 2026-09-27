@@ -246,6 +246,7 @@ function createInitialState(configName: string): CoreState {
 		matrixRoutes: [],
 		pluginBridge: defaultPluginBridge(),
 		keywordRules: [],
+		revokedDeviceIds: [],
 		events: [],
 	};
 }
@@ -464,6 +465,7 @@ function hydrateState(raw: Partial<CoreState>, configName: string, updatedAt?: n
 		matrixRoutes: raw.matrixRoutes || [],
 		pluginBridge: { ...defaultPluginBridge(), ...(raw.pluginBridge || {}) },
 		keywordRules: Array.isArray(raw.keywordRules) ? raw.keywordRules : [],
+		revokedDeviceIds: Array.isArray(raw.revokedDeviceIds) ? raw.revokedDeviceIds.map(String) : [],
 		events: raw.events || [],
 	};
 
@@ -889,6 +891,11 @@ function handleMessage(message: ClientMessage): void {
 			break;
 		}
 		case "register_device": {
+			if (state.revokedDeviceIds?.includes(message.payload.id)) {
+				// The phone learns it from the broadcast state and shows why.
+				emitEvent("system", `Revoked device ${message.payload.label || message.payload.id} tried to register`);
+				break;
+			}
 			const existing = ensureDevice(message.payload.id);
 			const next: BeltpackDevice = {
 				id: message.payload.id,
@@ -1882,13 +1889,7 @@ app.patch("/api/devices/:id/audio", (req, res) => {
 	res.json({ ok: true, state });
 });
 
-app.delete("/api/devices/:id", (req, res) => {
-	const id = req.params.id;
-	if (!state.devices[id]) {
-		res.status(404).json({ ok: false, error: "Device not found" });
-		return;
-	}
-
+function removeDevice(id: string): void {
 	(state.devices[id].transcriptionChannelIds || []).forEach((channelId) => {
 		dropRecognizer(id, channelId);
 	});
@@ -1900,8 +1901,44 @@ app.delete("/api/devices/:id", (req, res) => {
 	Object.values(state.antennas).forEach((antenna) => {
 		antenna.connectedDeviceIds = antenna.connectedDeviceIds.filter((deviceId) => deviceId !== id);
 	});
+}
+
+app.delete("/api/devices/:id", (req, res) => {
+	const id = req.params.id;
+	if (!state.devices[id]) {
+		res.status(404).json({ ok: false, error: "Device not found" });
+		return;
+	}
+	removeDevice(id);
 	emitEvent("register", `Device ${id} removed`);
 	res.json({ ok: true, state });
+});
+
+// Revoke a browser beltpack: removed now, refused on its next register until
+// restored. Only for the device ids that come from the invite link; hardware
+// beltpacks are removed, not revoked.
+app.post("/api/devices/:id/revoke", (req, res) => {
+	const id = req.params.id;
+	if (!id.startsWith("web-")) {
+		res.status(400).json({ ok: false, error: "Only browser beltpacks (web-…) can be revoked" });
+		return;
+	}
+	const label = state.devices[id]?.label ?? id;
+	if (state.devices[id]) removeDevice(id);
+	state.revokedDeviceIds = [...new Set([...(state.revokedDeviceIds ?? []), id])];
+	emitEvent("system", `Browser beltpack ${label} revoked`);
+	res.json({ ok: true });
+});
+
+app.delete("/api/devices/:id/revoke", (req, res) => {
+	const id = req.params.id;
+	if (!state.revokedDeviceIds?.includes(id)) {
+		res.status(404).json({ ok: false, error: "Device is not revoked" });
+		return;
+	}
+	state.revokedDeviceIds = state.revokedDeviceIds.filter((d) => d !== id);
+	emitEvent("system", `Browser beltpack ${id} restored`);
+	res.json({ ok: true });
 });
 
 app.patch("/api/matrix", (req, res) => {

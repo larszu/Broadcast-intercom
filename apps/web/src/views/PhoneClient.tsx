@@ -228,13 +228,18 @@ export function PhoneClient({ state, sendWs, connected, setAudioChunkHandler }: 
     };
   }, []);
 
+  // Revoked by the admin: do not register; once restored, the key changes
+  // and the beltpack registers again by itself.
+  const revoked = Boolean(state.revokedDeviceIds?.includes(clientId.current));
+
   useEffect(() => {
     if (channels.length === 0) return;
     const channelIds = channels.map((ch) => ch.id).sort();
     // Deduplicate: only re-register when params actually change
-    const key = `${channelIds.join(",")}|${clientLabel}|${resolvedUserId}`;
+    const key = `${channelIds.join(",")}|${clientLabel}|${resolvedUserId}|${revoked}`;
     if (lastRegisteredKeyRef.current === key) return;
     lastRegisteredKeyRef.current = key;
+    if (revoked) return;
     console.log(`[PhoneClient.register] Registering device: id=${clientId.current}, label=${clientLabel}, channels=${channelIds.join(",")}`);
     sendWs({
       type: "register_device",
@@ -251,7 +256,7 @@ export function PhoneClient({ state, sendWs, connected, setAudioChunkHandler }: 
     if (resolvedUserId) {
       sendWs({ type: "set_user", payload: { id: clientId.current, userId: resolvedUserId } });
     }
-  }, [channels, clientLabel, resolvedUserId, sendWs]);
+  }, [channels, clientLabel, resolvedUserId, sendWs, revoked]);
 
   useEffect(() => {
     const listen = myDevice?.listenChannelIds || [];
@@ -443,6 +448,17 @@ export function PhoneClient({ state, sendWs, connected, setAudioChunkHandler }: 
   });
 
   // Setup screen – shown when no name has been configured yet
+  if (revoked) {
+    return (
+      <div className="phoneSetupWrap">
+        <div className="phoneSetupCard">
+          <h1>{t.revokedTitle}</h1>
+          <p>{t.revokedText}</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!setupDone) {
     const users = Object.values(state.users);
     const handleSetupConfirm = () => {

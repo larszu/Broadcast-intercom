@@ -1261,3 +1261,6 @@ textarea:focus-visible,
 .ruleForm .ruleWide { flex: 1; min-width: 240px; }
 .ruleRow { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
 .ruleAction { font-family: ui-monospace, monospace; font-size: 12px; color: var(--text2); flex: 1; min-width: 200px; overflow-wrap: anywhere; }
+/* Revoked browser beltpacks (Setup → Devices & Users) */
+.dmRevoked { margin-top: 12px; }
+.dmRevokedTitle { font-size: 11px; color: var(--text2); margin: 0 0 6px; text-transform: uppercase; letter-spacing: .05em; }
