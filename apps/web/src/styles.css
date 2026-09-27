@@ -830,6 +830,11 @@ input[type="range"]:disabled {
 .transcriptExportLabel { font-size: 12px; color: var(--text2); margin-left: 8px; }
 .chatBubble.bookmark .chatBubbleBody { border-color: var(--warning); }
 .bookmarkMark { background: var(--warning); color: var(--accent-text); }
+.chFilterGroup { display: inline-flex; }
+.chPinBtn { border: 1px solid var(--border); border-left: 0; background: var(--bg3); color: var(--text2); padding: 4px 8px; font-size: 12px; cursor: pointer; }
+.chPinBtn.pinOn { color: var(--warning); }
+.unreadBadge { margin-left: 6px; background: var(--accent); color: var(--accent-text); font-size: 10px; font-weight: 700; padding: 0 5px; }
+.chatBubble.pinned .chatBubbleBody { border-left: 3px solid var(--warning); }
 .searchInput {
   width: 100%;
   background: var(--bg3);

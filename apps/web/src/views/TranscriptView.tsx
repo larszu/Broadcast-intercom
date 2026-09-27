@@ -40,6 +40,15 @@ function parseBookmark(e: EventItem): ParsedEntry {
   return { id: e.id, ts: e.ts, channel: "", sender: "", text: e.message, bookmark: true };
 }
 
+function readPinned(): Set<string> {
+  try {
+    const raw = JSON.parse(localStorage.getItem("transcriptPinned") ?? "[]");
+    return new Set(Array.isArray(raw) ? raw.map(String) : []);
+  } catch {
+    return new Set();
+  }
+}
+
 function getModelLang(): "en" | "de" {
   return (localStorage.getItem("transcriptModelLang") as "en" | "de" | null) ?? "en";
 }
@@ -59,9 +68,9 @@ function SenderAvatar({ name }: { name: string }) {
   );
 }
 
-function Bubble({ e, bookmarkLabel }: { e: ParsedEntry; bookmarkLabel: string }) {
+function Bubble({ e, bookmarkLabel, pinned = false }: { e: ParsedEntry; bookmarkLabel: string; pinned?: boolean }) {
   return (
-    <div className={`chatBubble${e.bookmark ? " bookmark" : ""}`}>
+    <div className={`chatBubble${e.bookmark ? " bookmark" : ""}${pinned ? " pinned" : ""}`}>
       {e.bookmark ? <div className="chatAvatar bookmarkMark">★</div> : <SenderAvatar name={e.sender} />}
       <div className="chatBubbleBody">
         <div className="chatMeta">
@@ -83,6 +92,12 @@ export function TranscriptView({ state, api, compact = false }: Props) {
   const [installing, setInstalling] = useState(false);
   const [modelLang, setModelLangState] = useState<"en" | "de">(getModelLang);
   const [note, setNote] = useState("");
+  // Pinned channels come first in the filter and their lines stand out. Kept
+  // per browser: it is how this operator reads, not part of the show.
+  const [pinned, setPinned] = useState<Set<string>>(readPinned);
+  // When each channel was last on screen. A line that arrives while its
+  // channel is filtered out counts as unread until the channel is shown.
+  const [lastSeen, setLastSeen] = useState<Record<string, number>>({});
 
   const channelList = Object.values(state.channels);
 
@@ -127,6 +142,39 @@ export function TranscriptView({ state, api, compact = false }: Props) {
   const exportHref = (format: string) =>
     `/api/transcript?format=${format}${exportChannelId ? `&channel=${encodeURIComponent(exportChannelId)}` : ""}`;
 
+  function togglePin(name: string) {
+    setPinned((prev) => {
+      const next = new Set(prev);
+      next.has(name) ? next.delete(name) : next.add(name);
+      try { localStorage.setItem("transcriptPinned", JSON.stringify([...next])); } catch { /* private mode */ }
+      return next;
+    });
+  }
+
+  const isVisible = (name: string) => selectedChannels.size === 0 || selectedChannels.has(name);
+
+  const allLines = useMemo(
+    () => state.events
+      .filter((e: EventItem) => e.type === "transcript")
+      .map(parseTranscript)
+      .filter((x): x is ParsedEntry => x !== null),
+    [state.events],
+  );
+
+  useEffect(() => {
+    const stamp = Date.now();
+    setLastSeen((prev) => {
+      const next = { ...prev };
+      for (const ch of channelList) if (isVisible(ch.name)) next[ch.name] = stamp;
+      return next;
+    });
+  }, [allLines, selectedChannels]);
+
+  const unread = (name: string) =>
+    isVisible(name) ? 0 : allLines.filter((e) => e.channel === name && e.ts > (lastSeen[name] ?? 0)).length;
+
+  const orderedChannels = [...channelList].sort((a, b) => Number(pinned.has(b.name)) - Number(pinned.has(a.name)));
+
   function toggleChannel(name: string) {
     setSelectedChannels((prev) => {
       const next = new Set(prev);
@@ -151,7 +199,7 @@ export function TranscriptView({ state, api, compact = false }: Props) {
     return (
       <div className="chatLog compactChat">
         {entries.length === 0 && <p className="chatEmpty">{t.transcriptChatEmpty}</p>}
-        {entries.map((e) => <Bubble key={e.id} e={e} bookmarkLabel={t.transcriptBookmarkLabel} />)}
+        {entries.map((e) => <Bubble key={e.id} e={e} bookmarkLabel={t.transcriptBookmarkLabel} pinned={pinned.has(e.channel)} />)}
       </div>
     );
   }
@@ -189,15 +237,29 @@ export function TranscriptView({ state, api, compact = false }: Props) {
       {/* Channel filter chips */}
       {channelList.length > 0 && (
         <div className="transcriptChannelFilters">
-          {channelList.map((ch) => (
-            <button
-              key={ch.id}
-              className={`chFilterChip ${selectedChannels.has(ch.name) ? "active" : ""}`}
-              onClick={() => toggleChannel(ch.name)}
-            >
-              {ch.name}
-            </button>
-          ))}
+          {orderedChannels.map((ch) => {
+            const n = unread(ch.name);
+            return (
+              <span key={ch.id} className="chFilterGroup">
+                <button
+                  className={`chFilterChip ${selectedChannels.has(ch.name) ? "active" : ""}`}
+                  onClick={() => toggleChannel(ch.name)}
+                >
+                  {ch.name}
+                  {n > 0 && <span className="unreadBadge" aria-label={t.transcriptUnread.replace("{n}", String(n))}>{n}</span>}
+                </button>
+                <button
+                  className={`chPinBtn ${pinned.has(ch.name) ? "pinOn" : ""}`}
+                  aria-pressed={pinned.has(ch.name)}
+                  title={pinned.has(ch.name) ? t.transcriptUnpin : t.transcriptPin}
+                  aria-label={pinned.has(ch.name) ? t.transcriptUnpin : t.transcriptPin}
+                  onClick={() => togglePin(ch.name)}
+                >
+                  ★
+                </button>
+              </span>
+            );
+          })}
         </div>
       )}
 
@@ -233,7 +295,7 @@ export function TranscriptView({ state, api, compact = false }: Props) {
       {/* Chat log */}
       <div className="chatLog">
         {entries.length === 0 && <p className="chatEmpty">{t.transcriptChatEmpty}</p>}
-        {entries.map((e) => <Bubble key={e.id} e={e} bookmarkLabel={t.transcriptBookmarkLabel} />)}
+        {entries.map((e) => <Bubble key={e.id} e={e} bookmarkLabel={t.transcriptBookmarkLabel} pinned={pinned.has(e.channel)} />)}
       </div>
     </div>
   );

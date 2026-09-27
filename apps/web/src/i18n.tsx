@@ -481,6 +481,9 @@ const EN = {
   transcriptBookmarkLabel: "Bookmark",
   transcriptExport: "Export",
   transcriptClear: "Clear transcript",
+  transcriptPin: "Pin channel",
+  transcriptUnpin: "Unpin channel",
+  transcriptUnread: "{n} unread",
   transcriptClearConfirm: "Clear the transcript and start a new session? Files already exported are not affected.",
 
   // ── Web client modal ────────────────────────────────────
@@ -942,6 +945,9 @@ const DE: typeof EN = {
   transcriptBookmarkLabel: "Marke",
   transcriptExport: "Exportieren",
   transcriptClear: "Transkript leeren",
+  transcriptPin: "Kanal anheften",
+  transcriptUnpin: "Kanal lösen",
+  transcriptUnread: "{n} ungelesen",
   transcriptClearConfirm: "Transkript leeren und eine neue Sitzung beginnen? Bereits exportierte Dateien bleiben unberührt.",
 
   // ── Web client modal ────────────────────────────────────
