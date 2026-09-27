@@ -25,7 +25,8 @@
     "audio:control": "node scripts/audio-control-check.mjs",
     "slider:check": "node scripts/slider-groesse-check.mjs",
     "library:check": "node scripts/device-library-check.mjs",
-    "lang:check": "node scripts/lang-check.mjs"
+    "lang:check": "node scripts/lang-check.mjs",
+    "automation:check": "node --experimental-strip-types scripts/automation-check.mts"
   },
   "devDependencies": {
     "concurrently": "^9.2.0",

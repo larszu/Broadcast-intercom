@@ -1254,3 +1254,10 @@ textarea:focus-visible,
 .dtUpload-pending { color: var(--text); }
 .dtUpload-never, .dtUpload-changed { color: var(--text2); }
 .dtUpload-blocked, .dtUpload-error { color: var(--warning); }
+
+/* Keyword rules (Setup → Automation) */
+.ruleForm { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin: 12px 0; }
+.ruleForm label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text2); }
+.ruleForm .ruleWide { flex: 1; min-width: 240px; }
+.ruleRow { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.ruleAction { font-family: ui-monospace, monospace; font-size: 12px; color: var(--text2); flex: 1; min-width: 200px; overflow-wrap: anywhere; }

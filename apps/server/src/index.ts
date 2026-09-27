@@ -14,6 +14,7 @@ import { WebSocketServer } from "ws";
 import { atomicWrite, bakPath, readWithBackup } from "./configStore.js";
 import { zertifikatBesorgen } from "./tls.js";
 import { TRANSCRIPT_FORMATS, TranscriptLog, type TranscriptFormat } from "./transcriptLog.js";
+import { dueRules, fireAction, ruleError, type TranscriptHit } from "./automation.js";
 import type {
 	AudioSettings,
 	BeltpackDevice,
@@ -28,6 +29,7 @@ import type {
 	EventItem,
 	IntercomGroup,
 	IntercomUser,
+	KeywordRule,
 	MatrixRoute,
 	PluginBridgeConfig,
 	PopupMode,
@@ -243,6 +245,7 @@ function createInitialState(configName: string): CoreState {
 		sessions: {},
 		matrixRoutes: [],
 		pluginBridge: defaultPluginBridge(),
+		keywordRules: [],
 		events: [],
 	};
 }
@@ -460,6 +463,7 @@ function hydrateState(raw: Partial<CoreState>, configName: string, updatedAt?: n
 		sessions: {}, // Sessions sind flüchtig, werden nie persistiert
 		matrixRoutes: raw.matrixRoutes || [],
 		pluginBridge: { ...defaultPluginBridge(), ...(raw.pluginBridge || {}) },
+		keywordRules: Array.isArray(raw.keywordRules) ? raw.keywordRules : [],
 		events: raw.events || [],
 	};
 
@@ -784,6 +788,16 @@ function relayAudioChunk(senderDeviceId: string, channelId: string, sampleRate: 
 let voskWarningEmitted = false;
 const transcriptLog = new TranscriptLog();
 
+function runKeywordRules(hit: TranscriptHit): void {
+	for (const rule of dueRules(state.keywordRules ?? [], hit)) {
+		void fireAction(rule, hit).then((err) => {
+			emitEvent("system", err
+				? `Rule "${rule.keyword}" (${rule.action.kind}) failed: ${err}`
+				: `Rule "${rule.keyword}" fired ${rule.action.kind} on [${hit.channelName}]`);
+		});
+	}
+}
+
 function handleTranscriptionAudio(payload: Extract<ClientMessage, { type: "transcribe_audio" }>["payload"]): void {
 	const device = ensureDevice(payload.id);
 	if (!device) {
@@ -837,6 +851,7 @@ function handleTranscriptionAudio(payload: Extract<ClientMessage, { type: "trans
 		const channelName = state.channels[payload.channelId]?.name || payload.channelId;
 		transcriptLog.add({ id: randomUUID(), ts: now(), kind: "line", channelId: payload.channelId, channelName, sender: device.label, text });
 		emitEvent("transcript", `[${channelName}] ${device.label}: ${text}`);
+		runKeywordRules({ channelId: payload.channelId, channelName, sender: device.label, text, ts: now() });
 	} catch {
 		emitEvent("system", `Transcription error on ${device.label}/${payload.channelId}`);
 	}
@@ -1256,6 +1271,75 @@ app.delete("/api/transcript", (_req, res) => {
 	transcriptLog.clear();
 	emitEvent("system", "Transcript cleared");
 	res.json({ ok: true });
+});
+
+// ── Keyword rules (transcript → webhook / OSC) ───────────────────────────────
+function ruleFromBody(body: any, id: string): KeywordRule {
+	const a = body?.action ?? {};
+	const action = a.kind === "osc"
+		? { kind: "osc" as const, host: String(a.host ?? "").trim(), port: Number(a.port), address: String(a.address ?? "").trim() }
+		: { kind: "webhook" as const, url: String(a.url ?? "").trim() };
+	const channelId = body?.channelId ? String(body.channelId) : undefined;
+	return { id, keyword: String(body?.keyword ?? "").trim(), channelId, enabled: body?.enabled !== false, action };
+}
+
+app.get("/api/automation/rules", (_req, res) => {
+	res.json({ ok: true, rules: state.keywordRules ?? [] });
+});
+
+app.post("/api/automation/rules", (req, res) => {
+	const rule = ruleFromBody(req.body, randomUUID());
+	const err = ruleError(rule) ?? (rule.channelId && !state.channels[rule.channelId] ? "unknown channel" : null);
+	if (err) {
+		res.status(400).json({ ok: false, error: err });
+		return;
+	}
+	state.keywordRules = [...(state.keywordRules ?? []), rule];
+	emitEvent("config", `Keyword rule "${rule.keyword}" added`);
+	res.json({ ok: true, rule });
+});
+
+app.patch("/api/automation/rules/:id", (req, res) => {
+	const rules = state.keywordRules ?? [];
+	const i = rules.findIndex((r) => r.id === req.params.id);
+	if (i < 0) {
+		res.status(404).json({ ok: false, error: "rule not found" });
+		return;
+	}
+	const rule = ruleFromBody({ ...rules[i], ...req.body, action: req.body?.action ?? rules[i].action }, rules[i].id);
+	const err = ruleError(rule) ?? (rule.channelId && !state.channels[rule.channelId] ? "unknown channel" : null);
+	if (err) {
+		res.status(400).json({ ok: false, error: err });
+		return;
+	}
+	state.keywordRules = rules.map((r, j) => (j === i ? rule : r));
+	emitEvent("config", `Keyword rule "${rule.keyword}" updated`);
+	res.json({ ok: true, rule });
+});
+
+app.delete("/api/automation/rules/:id", (req, res) => {
+	const rules = state.keywordRules ?? [];
+	const rule = rules.find((r) => r.id === req.params.id);
+	if (!rule) {
+		res.status(404).json({ ok: false, error: "rule not found" });
+		return;
+	}
+	state.keywordRules = rules.filter((r) => r.id !== rule.id);
+	emitEvent("config", `Keyword rule "${rule.keyword}" removed`);
+	res.json({ ok: true });
+});
+
+// Sends the action once with a sample line, so an operator can check the
+// console or the webhook receiver before the show instead of during it.
+app.post("/api/automation/rules/:id/test", async (req, res) => {
+	const rule = (state.keywordRules ?? []).find((r) => r.id === req.params.id);
+	if (!rule) {
+		res.status(404).json({ ok: false, error: "rule not found" });
+		return;
+	}
+	const channelName = rule.channelId ? state.channels[rule.channelId]?.name ?? rule.channelId : "*";
+	const err = await fireAction(rule, { channelId: rule.channelId ?? "", channelName, sender: "Test", text: `Test: ${rule.keyword}`, ts: now() });
+	res.status(err ? 502 : 200).json(err ? { ok: false, error: err } : { ok: true });
 });
 
 app.get("/api/network/hosts", (_req, res) => {

@@ -9,6 +9,8 @@
  *   npm run test:smoke          # in another  (BASE=http://host:port to override)
  */
 import WebSocket from "ws";
+import dgram from "node:dgram";
+import http from "node:http";
 
 const BASE = process.env.BASE || "http://localhost:4001";
 let pass = 0,
@@ -254,6 +256,31 @@ async function run() {
 	} else {
 		results.push("  –  PWA checks skipped (no web build served)");
 	}
+	// ── Keyword rules → OSC / webhook ──
+	// A spoken keyword needs Vosk; the test endpoint sends the same action
+	// with a sample line, which is what an operator uses before the show.
+	check("rule without keyword → 400", (await api("POST", "/api/automation/rules", { keyword: " ", action: { kind: "osc", host: "127.0.0.1", port: 9, address: "/x" } })).status === 400);
+	check("rule with a file: URL → 400", (await api("POST", "/api/automation/rules", { keyword: "go", action: { kind: "webhook", url: "file:///etc/passwd" } })).status === 400);
+	const udp = dgram.createSocket("udp4");
+	await new Promise((r) => udp.bind(0, "127.0.0.1", r));
+	const oscPacket = new Promise((resolve) => { udp.once("message", (m) => resolve(m)); setTimeout(() => resolve(null), 3000); });
+	const oscRule = await api("POST", "/api/automation/rules", { keyword: "Stand by", action: { kind: "osc", host: "127.0.0.1", port: udp.address().port, address: "/smoke/cue" } });
+	check("OSC rule → 200", oscRule.status === 200 && oscRule.json?.rule?.enabled === true);
+	check("rule is in the state", ((await api("GET", "/api/state")).json?.keywordRules ?? []).some((r) => r.keyword === "Stand by"));
+	const oscTest = await api("POST", `/api/automation/rules/${oscRule.json?.rule?.id}/test`);
+	const packet = await oscPacket;
+	udp.close();
+	const parts = packet ? packet.toString("utf8").split("\0").filter(Boolean) : [];
+	check("OSC test arrives as an OSC message", oscTest.status === 200 && parts[0] === "/smoke/cue" && parts[1] === ",ssss" && parts[2] === "Test: Stand by", parts.join("|"));
+	let hookBody = null;
+	const hook = http.createServer((req, res) => { let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => { hookBody = b; res.end("ok"); }); });
+	await new Promise((r) => hook.listen(0, "127.0.0.1", r));
+	const hookRule = await api("POST", "/api/automation/rules", { keyword: "go", action: { kind: "webhook", url: `http://127.0.0.1:${hook.address().port}/cue` } });
+	const hookTest = await api("POST", `/api/automation/rules/${hookRule.json?.rule?.id}/test`);
+	hook.close();
+	check("webhook test posts the line as JSON", hookTest.status === 200 && JSON.parse(hookBody ?? "{}")?.text === "Test: go");
+	check("rule can be switched off", (await api("PATCH", `/api/automation/rules/${hookRule.json?.rule?.id}`, { enabled: false })).json?.rule?.enabled === false);
+	check("rules delete", (await api("DELETE", `/api/automation/rules/${oscRule.json?.rule?.id}`)).status === 200 && (await api("DELETE", `/api/automation/rules/${hookRule.json?.rule?.id}`)).status === 200);
 
 	// ── Cleanup ──
 	check("DELETE device → 200", (await api("DELETE", "/api/devices/bp-smoke-1")).status === 200);

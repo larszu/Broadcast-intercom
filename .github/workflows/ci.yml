@@ -122,6 +122,11 @@ jobs:
       - name: Oberflaechentexte kommen aus i18n (Quellsprache en)
         run: npm run lang:check
 
+      # Das Erkennen der Stichwort-Regeln braucht kein Vosk: „go" darf nicht
+      # in „going" ausloesen und nicht zweimal in einer Sekunde.
+      - name: Stichwort-Regeln loesen nur bei ganzen Woertern aus
+        run: npm run automation:check
+
       - name: Kern starten
         run: |
           MOCK_DEVICES=1 node apps/server/dist/index.js > /tmp/intercom.log 2>&1 &
@@ -147,7 +152,7 @@ jobs:
           cat /tmp/intercom.log
           exit 1
 
-      - name: Smoke-Test (68 Pruefungen)
+      - name: Smoke-Test (76 Pruefungen)
         run: npm run test:smoke
 
       - name: Server-Log bei Fehlschlag
