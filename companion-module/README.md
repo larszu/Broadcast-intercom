@@ -1,7 +1,7 @@
-# Broadcast Intercom — Bitfocus Companion module
+# LZ Broadcast Intercom — Bitfocus Companion module
 
 A [Bitfocus Companion](https://bitfocus.io/companion) connection module for the
-[Broadcast Intercom](../README.md) core server. It lets a Stream Deck (or any
+[LZ Broadcast Intercom](../README.md) core server. It lets a Stream Deck (or any
 Companion surface) act as a hardware control panel for the intercom:
 push-to-talk, mute, volume, direct calls and emergency, with live button
 feedback for talk state, battery, emergency and connection health.
@@ -13,7 +13,7 @@ feedback for talk state, battery, emergency and connection health.
                                              └─ WS  /ws                     (live state + direct calls)
                                                         │
                                                         ▼
-                                              Broadcast Intercom core (:4001)
+                                            LZ Broadcast Intercom core (:4001)
 ```
 
 - **Commands** (PTT, mute, volume, emergency) go to the Companion-compatible
@@ -45,7 +45,7 @@ Companion loads "developer" modules from a folder you point it at.
 3. In Companion, open **Settings → Developer modules path** and select the
    folder that *contains* this `companion-module` directory (or copy this
    directory into your configured dev-modules path).
-4. Add a connection: **Connections → Add → Broadcast Intercom**, then set the
+4. Add a connection: **Connections → Add → LZ Broadcast Intercom**, then set the
    core **Host** and **Port**.
 
 ## Build a distributable package
@@ -74,7 +74,7 @@ PTT, mute/unmute, emergency and the derived feedbacks all round-trip correctly.
 ## Compatibility
 
 - Companion 3.x (module API `@companion-module/base` v1.12, node18 runtime).
-- Broadcast Intercom core v0.1.0+.
+- LZ Broadcast Intercom core v0.1.0+.
 
 ## License
 

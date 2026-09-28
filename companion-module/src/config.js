@@ -5,9 +5,9 @@ export const configFields = [
 		type: 'static-text',
 		id: 'info',
 		width: 12,
-		label: 'Broadcast Intercom',
+		label: 'LZ Broadcast Intercom',
 		value:
-			'Controls a Broadcast Intercom core server. Enter the host and port of the core ' +
+			'Controls an LZ Broadcast Intercom core server. Enter the host and port of the core ' +
 			'(the same machine that serves the operator UI). The module keeps a live WebSocket ' +
 			'connection for instant talk / battery / emergency feedback.',
 	},

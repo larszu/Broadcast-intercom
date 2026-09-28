@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Broadcast Intercom — lokal starten (Linux / macOS)
+# LZ Broadcast Intercom — lokal starten (Linux / macOS)
 #
 # ─── WAS GEMELDET WURDE (Nutzer, 2026-09-09) ────────────────────────────────
 #

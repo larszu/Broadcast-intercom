@@ -1,6 +1,6 @@
-# Broadcast Intercom
+# LZ Broadcast Intercom
 
-A self-hosted, browser-based production intercom system for live events and broadcast productions. Inspired by the architecture of [Green-GO](https://green-go.eu) wireless intercoms and the open-source [Eyevinn Open Intercom](https://github.com/Eyevinn/intercom-manager) project.
+LZ Broadcast Intercom is a self-hosted, browser-based production intercom system for live events and broadcast productions. Inspired by the architecture of [Green-GO](https://green-go.eu) wireless intercoms and the open-source [Eyevinn Open Intercom](https://github.com/Eyevinn/intercom-manager) project.
 
 > ⚠️ **Currently under development.**
 
@@ -262,7 +262,8 @@ Releases are built in CI: pushing a `v*` tag runs
 [`.github/workflows/release.yml`](.github/workflows/release.yml), which builds on
 `windows-latest` and `macos-latest` and attaches the `.exe` (Windows), `.dmg` +
 `.zip` (macOS universal) and the `electron-updater` manifests
-(`latest.yml` / `latest-mac.yml`) to the GitHub Release. macOS is ad-hoc signed
+(`latest.yml` / `latest-mac.yml`) to the GitHub Release. Installers are named
+`LZ Broadcast Intercom-<version>-<arch>.<ext>`. macOS is ad-hoc signed
 (no paid certificate), so first launch needs right-click → **Open**; Windows is
 unsigned (SmartScreen shows "unknown publisher").
 
@@ -272,7 +273,14 @@ device library token, encrypted by the main process with Electron
 
 Configs and Vosk models are stored in the OS user-data directory when running as
 the packaged app (the app bundle itself is read-only); the core reads
-`INTERCOM_DATA_DIR` to find them.
+`INTERCOM_DATA_DIR` to find them. That directory is pinned to the folder
+`Broadcast Intercom`, not the product name (e.g.
+`~/Library/Application Support/Broadcast Intercom`, `%APPDATA%\Broadcast Intercom`).
+
+The header shows the Lars Zumpe Medienproduktion signet (hidden below 640 px);
+**Setup → Settings & Logs → About** shows the logo, app name and version. Brand
+files live in `apps/web/src/assets/brand/`, app icons in `apps/desktop/build/`
+and `apps/web/public/`.
 
 ## Testing (headless)
 

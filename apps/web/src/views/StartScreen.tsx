@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ConfigRef, CoreState } from "@broadcast/shared";
 import { useLang } from "../i18n";
+import hauptlogo from "../assets/brand/lzm_hauptlogo_offwhite.svg";
 
 interface Props {
   onEnter: (state: CoreState) => void;
@@ -44,6 +45,7 @@ export function StartScreen({ onEnter, api }: Props) {
   return (
     <div className="startScreen">
       <div className="startCard">
+        <img className="aboutLogo" src={hauptlogo} alt={t.aboutCompany} />
         <h1>{t.startTitle}</h1>
         <p>{t.startSubtitle}</p>
 

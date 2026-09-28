@@ -1,4 +1,4 @@
-# Broadcast Intercom — lokal starten (Windows)
+# LZ Broadcast Intercom — lokal starten (Windows)
 #
 # ─── WAS GEMELDET WURDE (Nutzer, 2026-09-15) ────────────────────────────────
 #

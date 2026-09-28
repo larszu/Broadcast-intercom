@@ -1,7 +1,7 @@
 {
-  "name": "Broadcast Intercom Beltpack",
-  "short_name": "Beltpack",
-  "description": "Browser beltpack for the Broadcast Intercom core",
+  "name": "LZ Broadcast Intercom Beltpack",
+  "short_name": "LZ Beltpack",
+  "description": "Browser beltpack for the LZ Broadcast Intercom core",
   "start_url": "/?mode=client",
   "scope": "/",
   "display": "standalone",
@@ -9,7 +9,8 @@
   "background_color": "#132040",
   "theme_color": "#132040",
   "icons": [
-    { "src": "/icons/beltpack-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icons/beltpack-512.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
   ]
 }

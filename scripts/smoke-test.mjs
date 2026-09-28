@@ -1,5 +1,5 @@
 /**
- * Headless smoke test for the Broadcast Intercom core.
+ * Headless smoke test for the LZ Broadcast Intercom core.
  *
  * Exercises the REST API, the Companion control endpoint and the WebSocket
  * protocol against a running core — no browser required.
