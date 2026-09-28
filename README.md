@@ -37,7 +37,7 @@ publishes by itself — nothing in this repo needs changing.
 - **Audio transcription** — optional Vosk speech-to-text per channel; the transcript view filters by channel and text, pins channels to the front (per browser) and counts unread lines of channels filtered out, takes operator **bookmarks** ("cue 34 late") in the same timeline, and exports the show's transcript as **TXT, SRT or JSON** (`GET /api/transcript?format=txt|srt|json[&channel=<id>]`, bookmark via `POST /api/transcript/bookmark`). The server keeps the last 5,000 lines and bookmarks until *Clear transcript*
 - **Keyword rules** (Setup → Automation) — a word or phrase in a transcript line sends an **OSC** message (UDP; address, then text, channel, speaker, keyword as strings) or a **webhook** (POST JSON), optionally only for one channel; whole words only, at most once per second per rule, a *Test* button sends a sample line. Stored in the show config; REST under `/api/automation/rules`
 - **Plugin Bridge** — optional VST/audio plugin integration via WebSocket
-- **Device library** — sign in to [devices.zumpelars.de](https://devices.zumpelars.de) (Setup → Settings & Logs), sync shared intercom device types as a read-only source; own device types are uploaded automatically (new or changed ones, at start and after each edit) and **Sync now** uploads, then fetches; the `intercom` facet format is documented in [docs/device-library.md](docs/device-library.md)
+- **Device library** — sign in to [devices.zumpelars.de](https://devices.zumpelars.de) (Setup → Settings & Logs), sync shared intercom device types as a read-only source; own device types are uploaded automatically (new or changed ones, at start and after each edit) and **Sync now** uploads, then fetches. The synced copy keeps working without the server: it changes only on a successful answer (offline, timeouts, errors and sign-out leave it as is), every server address keeps its own copy, and a freshly set-up empty server never wipes it; the `intercom` facet format is documented in [docs/device-library.md](docs/device-library.md)
 - **Device types** — own and library types under Setup → Device types; *Add device* takes role and transports from the picked type
 - **Intercom plan import** — reads the vendor-neutral `avplan-intercom` file the AV Planner Suite exports: conferences, stations, and talk/listen kept apart. Merged by name, never deleting ([details](docs/plan-import.md))
 
@@ -292,7 +292,7 @@ The device library connection is checked without a server or browser:
 
 ```bash
 npm run lang:check          # every UI text comes from i18n.tsx: no German and no untranslated English outside t
-npm run library:check       # facet round trip, no project data, sync, upload + change detection, token handling
+npm run library:check       # facet round trip, no project data, sync, offline contract (copy per server, reset, empty server, sign-out), upload + change detection, token handling
 ```
 
 The Companion module has its own end-to-end test that drives the real module

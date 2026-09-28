@@ -380,8 +380,9 @@ const EN = {
   libErrWrongCode: "The code is wrong or expired. Enter the current one from your authenticator app.",
   libErrRateLimited: "Too many attempts. Wait a minute and try again.",
   libErrNotSignedIn: "The sign-in has expired. Sign in again.",
-  libErrOffline: "The library cannot be reached. Check the network and the server address.",
+  libErrOffline: "The library cannot be reached. The devices from the last sync stay available; check the network and the server address.",
   libErrServer: "The library answered with an error. Try again later.",
+  libErrServerEmpty: "The server was set up anew and has no devices yet. Your devices from the last sync were kept.",
   libErrInvalidUrl: "That is not a server address. Example: https://devices.zumpelars.de",
   libErrInsecureUrl: "The address must start with https:// — the sign-in token travels with every request. Plain http only works for localhost.",
 
@@ -870,8 +871,9 @@ const DE: typeof EN = {
   libErrWrongCode: "Der Code stimmt nicht oder ist abgelaufen. Den aktuellen aus der Authenticator-App eingeben.",
   libErrRateLimited: "Zu viele Versuche. Eine Minute warten und erneut versuchen.",
   libErrNotSignedIn: "Die Anmeldung ist abgelaufen. Bitte neu anmelden.",
-  libErrOffline: "Die Bibliothek ist nicht erreichbar. Netzwerk und Serveradresse prüfen.",
+  libErrOffline: "Die Bibliothek ist nicht erreichbar. Die Geräte vom letzten Abgleich bleiben verfügbar; Netzwerk und Serveradresse prüfen.",
   libErrServer: "Die Bibliothek hat mit einem Fehler geantwortet. Später erneut versuchen.",
+  libErrServerEmpty: "Der Server wurde neu aufgesetzt und hat noch keine Geräte. Deine Geräte vom letzten Abgleich wurden behalten.",
   libErrInvalidUrl: "Das ist keine Serveradresse. Beispiel: https://devices.zumpelars.de",
   libErrInsecureUrl: "Die Adresse muss mit https:// beginnen \u2014 das Anmelde-Token geht bei jeder Anfrage mit. Reines http nur für localhost.",
 

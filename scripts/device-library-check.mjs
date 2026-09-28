@@ -16,7 +16,13 @@
 //      gehoeren zum Geraet in der Show, nicht zum Typ. Ein Facet, das sie
 //      mitnimmt, veroeffentlicht den Aufbau einer Anlage.
 //   3. DER ABGLEICH IST INKREMENTELL. `latestSeq` weiter, `removed` raus,
-//      Ungueltiges gezaehlt statt verschluckt, Serverwechsel = neue Kopie.
+//      Ungueltiges gezaehlt statt verschluckt.
+//   4. DIE BIBLIOTHEK ARBEITET OHNE SERVER WEITER (Vertrag in `syncFrom`,
+//      2026-09-28). Die Kopie aendert sich nur durch eine erfolgreiche
+//      Antwort: offline, Zeitueberschreitung, leerer Ersatzserver und
+//      Abmelden lassen sie stehen. Jeder Server hat seinen eigenen Platz,
+//      ein Serverwechsel loescht die Kopie des alten nicht. Geprueft am
+//      echten Store mit nachgebautem localStorage, nicht am Quelltext.
 //
 // Dazu: der Client ist die unveraenderte Kopie aus larszu/av-device-library,
 // das Release spricht ohne Einstellung https://devices.zumpelars.de an, das
@@ -133,7 +139,17 @@ check('Antwort fuer anderen Planner wird abgelehnt', (() => { try { abgleich.app
 
 const gespeichert = JSON.parse(JSON.stringify(c))
 check('Kopie ueberlebt Speichern und Laden', abgleich.cacheFor(gespeichert, S).latestSeq === 6)
-check('Serverwechsel verwirft die Kopie', abgleich.cacheFor(gespeichert, 'https://andere.example').latestSeq === 0)
+check('anderer Server bekommt nicht diese Kopie', abgleich.cacheFor(gespeichert, 'https://andere.example').latestSeq === 0)
+check('alte Einzelkopie wird als Platz ihres Servers gelesen (Migration)', abgleich.cacheFor(gespeichert, S).entries.b?.status === 'verified')
+const A = 'https://andere.example'
+const zwei = abgleich.withCache(abgleich.withCache(gespeichert, { ...abgleich.emptyCache(A), latestSeq: 2 }), c)
+check('Speichern fuer einen Server laesst den anderen stehen', abgleich.cacheFor(zwei, A).latestSeq === 2 && abgleich.cacheFor(zwei, S).latestSeq === 6)
+check('Migration verliert nichts: alte Kopie bleibt neben dem neuen Server', abgleich.cacheFor(abgleich.withCache(gespeichert, abgleich.emptyCache(A)), S).latestSeq === 6)
+check('ein kaputter Platz stoert die anderen nicht', abgleich.cacheFor({ ...zwei, byServer: { ...zwei.byServer, [A]: 'kaputt' } }, S).latestSeq === 6)
+const neuAufgesetzt = antwort(2, [geraet('neu', 2)])
+const ersetzt = abgleich.applySyncResult(c, { reset: true, response: neuAufgesetzt })
+check('reset ersetzt die Kopie ganz', Object.keys(ersetzt.entries).join() === 'neu' && ersetzt.latestSeq === 2 && !ersetzt.rejected.kaputt)
+check('ohne reset ist es ein Delta', Object.keys(abgleich.applySyncResult(c, { reset: false, response: neuAufgesetzt }).entries).sort().join() === 'b,kaputt,neu')
 gespeichert.entries.b.type.facet.version = 99
 check('unlesbare Kopie erzwingt vollen Abgleich', abgleich.cacheFor(gespeichert, S).latestSeq === 0)
 
@@ -235,6 +251,68 @@ console.log('Geraeteverwaltung ist uebersetzt')
 const dm = lies('apps/web/src/views/DeviceManager.tsx')
 const deutsch = dm.split('\n').filter((z) => !z.trim().startsWith('//') && /[äöüÄÖÜß]|\b(Gerät|Benutzer|Entfernen|Bearbeiten|Speichern|Abbrechen|Kopieren|Sprechen)\b/.test(z))
 check('keine hart kodierten deutschen Texte in DeviceManager', deutsch.length === 0, deutsch.join(' | '))
+
+console.log('Abgleich ohne Server: syncFrom und Zeitlimit')
+let syncAntwort = () => antwort(0, [])
+globalThis.fetch = async (url) => new Response(JSON.stringify(syncAntwort(Number(new URL(url).searchParams.get('after')))), { status: 200 })
+const syncFehler = async (after) => { try { await client.syncFrom(S, 't', 'intercom', after); return 'kein Fehler' } catch (e) { return `${e.code}/${e.message}` } }
+check('leerer Ersatzserver ist ein Fehler, kein neuer Stand', (await syncFehler(6)) === 'server/server-empty')
+syncAntwort = (after) => (after === 0 ? neuAufgesetzt : antwort(2, []))
+const neuStand = await client.syncFrom(S, 't', 'intercom', 6)
+check('kleinerer latestSeq holt den ganzen Stand (reset)', neuStand.reset === true && neuStand.response.devices[0].slug === 'neu')
+syncAntwort = () => antwort(7, [geraet('c', 7)])
+check('gleicher Server: Delta ohne reset', (await client.syncFrom(S, 't', 'intercom', 6)).reset === false)
+let signal = null
+globalThis.fetch = async (_url, init) => { signal = init.signal; throw new DOMException('timed out', 'TimeoutError') }
+check('jede Anfrage hat ein Zeitlimit', signal === null && (await syncFehler(0)) === 'offline/offline' && signal instanceof AbortSignal)
+check('Zeitlimits sind gesetzt', client.REQUEST_TIMEOUT_MS > 0 && client.UPLOAD_TIMEOUT_MS >= client.REQUEST_TIMEOUT_MS)
+
+console.log('Kopie im Store: bleibt, bis eine Antwort sie ersetzt')
+const ablage = new Map([
+	['deviceLibrary.token', JSON.stringify({ server: S, token: 'geheim' })],
+	// Alte Einzelkopie, wie sie vor den Serverplaetzen gespeichert wurde.
+	['deviceLibrary.cache', JSON.stringify(c)],
+])
+globalThis.localStorage = {
+	getItem: (k) => (ablage.has(k) ? ablage.get(k) : null),
+	setItem: (k, v) => ablage.set(k, String(v)),
+	removeItem: (k) => ablage.delete(k),
+}
+globalThis.window = {}
+let netz = 'offline'
+globalThis.fetch = async (url) => {
+	const u = new URL(url)
+	if (u.pathname === '/api/auth/get-session') return new Response(JSON.stringify({ user: { id: 'u1', email: 'a@b.example', name: 'A' } }), { status: 200 })
+	if (u.pathname === '/api/auth/sign-out') return new Response('{}', { status: 200 })
+	if (netz === 'offline') throw new TypeError('fetch failed')
+	return new Response(JSON.stringify(syncAntwort(Number(u.searchParams.get('after')))), { status: 200 })
+}
+const lib = await import(`../${LIB}/deviceLibraryStore.ts`)
+const st = lib.libraryState
+for (let i = 0; i < 200 && (st().phase === 'loading' || st().busy); i++) await new Promise((r) => setTimeout(r, 5))
+const gespeicherterPlatz = (server) => abgleich.cacheFor(JSON.parse(ablage.get('deviceLibrary.cache') ?? 'null'), server)
+check('alte Einzelkopie ist nach dem Update da', st().cache.latestSeq === 6 && !!st().cache.entries.b)
+check('offline beim Start: Kopie bleibt, Fehler offline', st().phase === 'signed-in' && st().error === 'offline' && st().cache.latestSeq === 6)
+netz = 'online'
+syncAntwort = () => antwort(0, [])
+await lib.actions.sync()
+check('leerer Ersatzserver: Kopie bleibt, eigene Meldung', st().error === 'server-empty' && st().cache.latestSeq === 6 && gespeicherterPlatz(S).latestSeq === 6)
+syncAntwort = () => antwort(7, [geraet('c', 7)])
+await lib.actions.sync()
+check('Delta kommt dazu', st().error === null && !!st().cache.entries.c && !!st().cache.entries.b && st().cache.latestSeq === 7)
+syncAntwort = (after) => (after === 0 ? neuAufgesetzt : antwort(2, []))
+await lib.actions.sync()
+check('neu aufgesetzter Server: reset ersetzt die Kopie', Object.keys(st().cache.entries).join() === 'neu' && st().cache.latestSeq === 2)
+check('gespeichert im Serverplatz-Format', JSON.parse(ablage.get('deviceLibrary.cache')).format === 'intercom-device-library-caches' && gespeicherterPlatz(S).latestSeq === 2)
+await lib.actions.signOut()
+check('Abmelden leert die Kopie nicht', st().phase === 'signed-out' && !!st().cache.entries.neu && gespeicherterPlatz(S).latestSeq === 2)
+await lib.actions.setServer(A)
+check('anderer Server: eigene (leere) Kopie', st().server === A && st().cache.latestSeq === 0 && Object.keys(st().cache.entries).length === 0)
+check('Serverwechsel loescht die Kopie des alten nicht', gespeicherterPlatz(S).latestSeq === 2)
+await lib.actions.setServer(null)
+check('zurueckgewechselt: alte Kopie ist wieder da', st().server === S && !!st().cache.entries.neu && st().cache.latestSeq === 2)
+const i18nTexte = lies('apps/web/src/i18n.tsx')
+check('libErrServerEmpty auf Englisch und Deutsch', i18nTexte.split('libErrServerEmpty:').length === 3)
 
 console.log('Quelltext')
 const kopie = lies(`${LIB}/deviceLibraryClient.ts`)

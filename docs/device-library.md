@@ -20,11 +20,14 @@ Reading the library needs an account. Accounts are created on the website
 - **Server** — `https://devices.zumpelars.de` unless changed. Only `https://`
   addresses are accepted (plain `http://` only for `localhost`), because the
   sign-in token travels with every request. **Reset to default** returns to the
-  release address. A new address is a new library: the token and the local copy
-  of the old one are dropped.
+  release address. A new address is a new library: the token is dropped and
+  the copy stored for the new address is shown. The copy of the old address
+  stays stored — switching back brings it back (older single-copy data is read
+  as the copy of its server).
 - **Sign in** with email or username and password. With two-factor sign-in
   enabled, a second step asks for the code from the authenticator app.
-- **Sign out** forgets the token, also when the library is not reachable.
+- **Sign out** forgets the token, also when the library is not reachable. The
+  synced devices stay.
 
 Every error code of the client has its own message. Two need action on the
 website: *guidelines outdated* (the community guidelines changed — the message
@@ -51,7 +54,12 @@ intercom core:
   page once it has one.
 - **From the device library** — read-only. **Sync now** first uploads new and
   changed own types, then fetches everything after the last known `latestSeq`; entries marked `removed` disappear, the copy is
-  kept across restarts. Each entry shows its status (verified, confirmed,
+  kept across restarts. The copy changes only on a successful answer: offline,
+  a timeout (15 s per request, 120 s per upload batch), a server error or an
+  expired sign-in leave the last synced devices usable. When the server reports
+  a lower `latestSeq` than known (set up anew, backup restored), everything is
+  fetched again and replaces the copy; if that full answer is empty, the copy
+  is kept and a message says so. Each entry shows its status (verified, confirmed,
   unconfirmed, disputed), the number of confirmations and a link to its page in
   the library. **Copy as own** starts an own type from it.
 
@@ -136,6 +144,6 @@ system.
 
 `npm run library:check` (in CI): release default, address rules, facet round
 trip, project fields kept out, version/kind/transport refused by meaning,
-incremental sync with `removed` and refused entries, cache bound to its server,
+incremental sync with `removed` and refused entries, one cache per server (switching keeps the other, legacy copy migrates), reset on a lower `latestSeq`, empty server and sign-out keep the cache, request timeout,
 the proposal and the batched upload on the wire, change detection and retry rules, auto-upload wiring, the device manager's translations, the library's error codes (each with a text in both languages), no logging of the token, `safeStorage` in the desktop
 app.
