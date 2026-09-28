@@ -67,59 +67,77 @@ AUS = {"node_modules", ".git", "dist", "build", "release", "_site", "__pycache__
 # Regel und ist keine.
 AUSNAHMEN = WURZEL / "scripts" / "site-ignore.txt"
 
+# Marke der Projektseite (Brand Guide 2.0 der Lars Zumpe Medienproduktion).
+# Liegt im Repo ein Verzeichnis mit den Markendateien, bekommt die Seite
+# Favicon, Signet im Kopf und Hauptlogo im Fuss. Fehlt es, bleibt der Text.
+MARKE = next((d for d in ("static/brand", "docs/brand", "assets/brand") if (WURZEL / d).is_dir()), None)
+
+
+def marke(wurzel: str, datei: str) -> str:
+    if MARKE and (WURZEL / MARKE / datei).exists():
+        return f"{wurzel}{MARKE}/{datei}"
+    return ""
+
+
 VORLAGE = """<!doctype html>
 <html lang="{sprache}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{titel}</title>
+{favicon}
 <style>
   :root {{
     color-scheme: dark;
-    --grund: #0f1419; --flaeche: #171d24; --linie: #2a323c;
-    --text: #e6edf3; --leise: #9aa7b4; --akzent: #4ea1ff;
+    --grund: #132040; --flaeche: #1D324F; --linie: rgba(246, 245, 240, 0.14);
+    --kopflinie: #8C9CB3; --text: #E1ECEF; --hell: #F6F5F0; --leise: #8C9CB3;
+    --signal: #D6402E;
   }}
-  * {{ box-sizing: border-box; }}
+  * {{ box-sizing: border-box; border-radius: 0; }}
   body {{
     margin: 0; background: var(--grund); color: var(--text);
-    font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font: 16px/1.65 "Public Sans", system-ui, "Segoe UI", Roboto, Arial, sans-serif;
   }}
-  .kopf {{ border-bottom: 1px solid var(--linie); background: var(--flaeche); }}
+  .kopf {{ border-bottom: 1px solid var(--kopflinie); background: var(--grund); }}
   .kopf .innen {{ max-width: 52rem; margin: 0 auto; padding: 0.9rem 1.5rem;
-    display: flex; gap: 1rem; align-items: baseline; flex-wrap: wrap; }}
-  .kopf a {{ color: var(--text); text-decoration: none; font-weight: 600; }}
+    display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }}
+  .kopf .signet {{ display: block; height: 32px; width: auto; }}
+  @media (max-width: 639px) {{ .kopf .signet {{ display: none; }} }}
+  .kopf a {{ color: var(--hell); text-decoration: none; font-weight: 800; }}
   .kopf .leise {{ color: var(--leise); font-size: 0.85rem; }}
   main {{ max-width: 52rem; margin: 0 auto; padding: 2rem 1.5rem 5rem; }}
-  a {{ color: var(--akzent); }}
-  h1, h2, h3, h4 {{ line-height: 1.25; margin: 2rem 0 0.75rem; }}
-  h1 {{ font-size: 2rem; margin-top: 0; }}
-  h2 {{ border-bottom: 1px solid var(--linie); padding-bottom: 0.35rem; }}
-  img {{ max-width: 100%; height: auto; border: 1px solid var(--linie); border-radius: 6px; }}
-  code {{ background: var(--flaeche); padding: 0.15em 0.4em; border-radius: 4px; font-size: 0.9em; }}
-  pre {{ background: var(--flaeche); border: 1px solid var(--linie); border-radius: 8px;
-    padding: 1rem; overflow-x: auto; }}
+  a {{ color: var(--hell); }}
+  a:hover {{ color: var(--text); }}
+  :focus-visible {{ outline: 2px solid var(--signal); outline-offset: 3px; }}
+  h1, h2, h3, h4 {{ line-height: 1.25; margin: 2rem 0 0.75rem; color: var(--hell); }}
+  h1 {{ font-size: 2rem; font-weight: 900; margin-top: 0; }}
+  h2 {{ font-weight: 800; border-bottom: 1px solid var(--kopflinie); padding-bottom: 0.35rem; }}
+  img {{ max-width: 100%; height: auto; }}
+  code {{ background: var(--flaeche); padding: 0.15em 0.4em; font-size: 0.9em; }}
+  pre {{ background: var(--flaeche); padding: 1rem; overflow-x: auto; }}
   pre code {{ background: none; padding: 0; }}
-  blockquote {{ margin: 1rem 0; padding: 0.4rem 1rem; border-left: 3px solid var(--akzent);
-    background: var(--flaeche); color: var(--leise); }}
+  blockquote {{ margin: 1rem 0; padding: 0.4rem 1rem; border-left: 3px solid var(--kopflinie);
+    background: var(--flaeche); color: var(--text); }}
   /* Breite Tabellen scrollen in sich, statt die Seite breit zu machen. */
   .tabelle {{ overflow-x: auto; }}
   table {{ border-collapse: collapse; width: 100%; }}
-  th, td {{ border: 1px solid var(--linie); padding: 0.45rem 0.7rem; text-align: left; }}
-  th {{ background: var(--flaeche); }}
+  th, td {{ border-bottom: 1px solid var(--linie); padding: 0.45rem 0.7rem; text-align: left; }}
+  th {{ background: var(--flaeche); color: var(--hell); }}
   hr {{ border: none; border-top: 1px solid var(--linie); margin: 2.5rem 0; }}
   footer {{ max-width: 52rem; margin: 0 auto; padding: 0 1.5rem 3rem;
     color: var(--leise); font-size: 0.85rem; }}
+  footer .logo {{ display: block; width: 160px; height: auto; margin-bottom: 1rem; }}
 </style>
 </head>
 <body>
 <header class="kopf"><div class="innen">
-  <a href="{wurzel}">{titel}</a>
+  {signet}<a href="{wurzel}">{titel}</a>
   <span class="leise">{unterzeile}</span>
 </div></header>
 <main>
 {inhalt}
 </main>
-<footer>Diese Seite ist aus den Markdown-Dateien des Repos gebaut. Was hier
+<footer>{logo}Diese Seite ist aus den Markdown-Dateien des Repos gebaut. Was hier
 steht, steht dort.</footer>
 </body>
 </html>
@@ -189,6 +207,16 @@ def links_umschreiben(text: str) -> str:
     return re.sub(r'(href)="([^"]*)"', ersetze, text)
 
 
+def markenteile(wurzel: str) -> dict[str, str]:
+    fav, sig, logo = (marke(wurzel, d) for d in (
+        "favicon.svg", "lzm_signet_offwhite_tally.svg", "lzm_hauptlogo_offwhite.svg"))
+    return {
+        "favicon": f'<link rel="icon" href="{fav}" type="image/svg+xml">' if fav else "",
+        "signet": f'<img class="signet" src="{sig}" alt="" height="32">' if sig else "",
+        "logo": f'<img class="logo" src="{logo}" alt="Lars Zumpe Medienproduktion" width="160">' if logo else "",
+    }
+
+
 def main() -> int:
     if ZIEL.exists():
         shutil.rmtree(ZIEL)
@@ -214,6 +242,7 @@ def main() -> int:
                 unterzeile=html.escape(rel.as_posix()),
                 wurzel="../" * tiefe + "index.html" if tiefe else "index.html",
                 inhalt=inhalt,
+                **markenteile("../" * tiefe),
             ),
             encoding="utf-8",
         )
