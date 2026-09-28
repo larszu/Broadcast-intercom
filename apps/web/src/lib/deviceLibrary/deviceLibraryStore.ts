@@ -12,7 +12,7 @@ import {
   LibraryError,
   signIn as signInRemote,
   signOut as signOutRemote,
-  sync as syncRemote,
+  syncFrom,
   upload as uploadRemote,
   verifySecondFactor,
   type LibraryErrorCode,
@@ -21,7 +21,7 @@ import {
 } from "./deviceLibraryClient.ts";
 import type { IntercomDeviceType } from "./intercomDeviceType.ts";
 import { applyUpload, ledgerFor, planUpload, pruneLedger, type UploadLedger } from "./libraryUpload.ts";
-import { applySync, cacheFor, effectiveServer, readServerUrl, type LibraryCache } from "./librarySync.ts";
+import { applySyncResult, cacheFor, effectiveServer, readServerUrl, withCache, type LibraryCache } from "./librarySync.ts";
 
 interface DesktopTokenBridge {
   get(): Promise<string | null>;
@@ -113,8 +113,11 @@ export interface LibraryState {
   user: LibraryUser | null;
   /** Encryption missing in the desktop app: the sign-in lasts until the app closes. */
   tokenSessionOnly: boolean;
-  error: LibraryErrorCode | "invalid-url" | "insecure-url" | null;
+  /** `server-empty`: the server was set up anew and delivered nothing; the copy was kept. */
+  error: LibraryErrorCode | "invalid-url" | "insecure-url" | "server-empty" | null;
   busy: boolean;
+  /** The copy of `server`. Kept offline, on errors and after sign-out; the
+   *  copies of other servers stay stored beside it. */
   cache: LibraryCache;
   own: OwnDeviceType[];
   /** Last upload per own type, with the hash of what was sent. */
@@ -149,10 +152,14 @@ function loadOwn(): OwnDeviceType[] {
 const listeners = new Set<() => void>();
 function set(patch: Partial<LibraryState>) {
   state = { ...state, ...patch };
-  if (patch.cache) write(KEY_CACHE, JSON.stringify(patch.cache));
   if (patch.own) write(KEY_OWN, JSON.stringify(patch.own));
   if (patch.uploads) write(KEY_UPLOADS, JSON.stringify(patch.uploads));
   for (const l of listeners) l();
+}
+
+/** Only a successful answer writes the copy — into its server's slot, beside the others. */
+function persistCache(cache: LibraryCache) {
+  write(KEY_CACHE, JSON.stringify(withCache(readJson(KEY_CACHE), cache)));
 }
 
 const codeOf = (e: unknown): LibraryErrorCode => (e instanceof LibraryError ? e.code : "offline");
@@ -223,8 +230,10 @@ export const actions = {
     await dropSession();
   },
   /**
-   * A new address is a new library: the token and the copy of the old one
-   * are dropped, not carried over. Returns `false` when the address is refused.
+   * A new address is a new library: the token is dropped, and the copy shown
+   * is the one stored for the new address (empty if there is none yet). The
+   * copy of the old address stays stored — switching back brings it back.
+   * Returns `false` when the address is refused.
    */
   async setServer(input: string | null): Promise<boolean> {
     let next: string;
@@ -245,19 +254,30 @@ export const actions = {
       return true;
     }
     if (token) await signOutRemote(state.server, token);
-    set({ server: next, serverCustom: next !== effectiveServer(null), cache: cacheFor(null, next), uploads: ledgerFor(null, next) });
+    set({ server: next, serverCustom: next !== effectiveServer(null), cache: cacheFor(readJson(KEY_CACHE), next), uploads: ledgerFor(null, next) });
     await dropSession();
     return true;
   },
   async sync() {
     if (!token) return;
     set({ busy: true, error: null });
+    const server = state.server;
+    const from = state.cache;
     try {
-      const res = await syncRemote(state.server, token, "intercom", state.cache.latestSeq);
-      set({ busy: false, cache: applySync(state.cache, res) });
+      // `syncFrom` fetches everything again when the server is no longer the
+      // same one, and refuses an empty full answer instead of handing it over.
+      const next = applySyncResult(from, await syncFrom(server, token, "intercom", from.latestSeq));
+      persistCache(next);
+      // The address changed while the answer was on its way: stored in its
+      // own slot, but not shown for the new address.
+      if (state.server === server) set({ busy: false, cache: next });
+      else set({ busy: false });
     } catch (e) {
+      // Nothing here touches the copy: offline, timeout, server error and an
+      // expired sign-in all leave the last synced devices usable.
       const code = codeOf(e);
       if (code === "not-signed-in" || code === "wrong-credentials") await dropSession("not-signed-in");
+      else if (e instanceof LibraryError && e.message === "server-empty") set({ busy: false, error: "server-empty" });
       else set({ busy: false, error: code });
     }
   },
@@ -327,6 +347,9 @@ function scheduleAuto() {
 }
 
 void restore();
+
+/** The current state outside React — for `npm run library:check`. */
+export const libraryState = (): LibraryState => state;
 
 export function useDeviceLibrary(): LibraryState {
   return useSyncExternalStore(

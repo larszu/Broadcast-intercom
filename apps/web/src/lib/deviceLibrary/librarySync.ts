@@ -1,7 +1,7 @@
 // Pure part of the device library connection: server address, the local copy
 // of the library and how a sync response changes it. No storage, no fetch —
 // `scripts/device-library-check.mjs` runs this file directly under Node.
-import { DEFAULT_DEVICE_LIBRARY_URL, type SyncDevice, type SyncResponse } from "./deviceLibraryClient.ts";
+import { DEFAULT_DEVICE_LIBRARY_URL, type SyncDevice, type SyncResponse, type SyncResult } from "./deviceLibraryClient.ts";
 import { readDeviceType, type IntercomDeviceType } from "./intercomDeviceType.ts";
 
 export type ServerUrlRead = { ok: true; url: string } | { ok: false; reason: "invalid" | "insecure" };
@@ -51,7 +51,7 @@ export interface RejectedEntry {
 }
 
 export interface LibraryCache {
-  /** The server this copy came from. A copy never outlives a server change. */
+  /** The server this copy came from. Each server has its own copy (see `CacheStore`). */
   server: string;
   latestSeq: number;
   entries: Record<string, LibraryEntry>;
@@ -61,10 +61,48 @@ export interface LibraryCache {
 
 export const emptyCache = (server: string): LibraryCache => ({ server, latestSeq: 0, entries: {}, rejected: {} });
 
-/** The stored copy if it belongs to `server` and still reads; otherwise a fresh one. */
+/**
+ * The copies of ALL servers, under one storage key.
+ *
+ * There used to be exactly one copy, and another server address meant: start
+ * over — the old copy was gone. Whoever switched to a stand-in server because
+ * devices.zumpelars.de was down, and switched back, had an empty library
+ * afterwards. Now every server has its own slot (contract point 2 of
+ * `syncFrom` in `deviceLibraryClient.ts`). A legacy single copy is read as the
+ * slot of the server it came from — nothing is lost by the migration.
+ */
+export interface CacheStore {
+  format: "intercom-device-library-caches";
+  version: 1;
+  /** Validated on read by `cacheFor`, so a broken slot never breaks the others. */
+  byServer: Record<string, unknown>;
+}
+
+const emptyStore = (): CacheStore => ({ format: "intercom-device-library-caches", version: 1, byServer: {} });
+
+/** Reads the new store, a legacy single copy, or nothing. */
+export function readCacheStore(stored: unknown): CacheStore {
+  if (!stored || typeof stored !== "object") return emptyStore();
+  const s = stored as Partial<CacheStore> & Partial<LibraryCache>;
+  if (s.format === "intercom-device-library-caches" && s.version === 1 && s.byServer && typeof s.byServer === "object") {
+    return { ...emptyStore(), byServer: { ...s.byServer } };
+  }
+  // Legacy: one copy, carrying its server.
+  if (typeof s.server === "string" && typeof s.latestSeq === "number") return { ...emptyStore(), byServer: { [s.server]: s } };
+  return emptyStore();
+}
+
+/** The store with `cache` in its server's slot; the other servers' slots stay untouched. */
+export function withCache(stored: unknown, cache: LibraryCache): CacheStore {
+  const store = readCacheStore(stored);
+  return { ...store, byServer: { ...store.byServer, [cache.server]: cache } };
+}
+
+/** The copy for `server` from the store (or a legacy copy) if it still reads; otherwise a fresh one. */
 export function cacheFor(stored: unknown, server: string): LibraryCache {
-  if (!stored || typeof stored !== "object") return emptyCache(server);
-  const c = stored as Partial<LibraryCache>;
+  const slot = readCacheStore(stored).byServer[server];
+  if (!slot || typeof slot !== "object") return emptyCache(server);
+  const c = slot as Partial<LibraryCache>;
   if (c.server !== server || typeof c.latestSeq !== "number" || !c.entries || !c.rejected) return emptyCache(server);
   const entries: Record<string, LibraryEntry> = {};
   for (const [slug, e] of Object.entries(c.entries)) {
@@ -120,4 +158,14 @@ export function applySync(cache: LibraryCache, res: SyncResponse, now = new Date
     rejected,
     syncedAt: now.toISOString(),
   };
+}
+
+/**
+ * Applies a `syncFrom` result. Whether the server is still the same one is
+ * decided by `syncFrom` in the shared client — the same rule in every
+ * planner. On `reset` the answer replaces the whole copy; an empty new server
+ * never arrives here but as an error, and the copy stays.
+ */
+export function applySyncResult(cache: LibraryCache, result: SyncResult, now = new Date()): LibraryCache {
+  return applySync(result.reset ? emptyCache(cache.server) : cache, result.response, now);
 }

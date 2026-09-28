@@ -14,6 +14,7 @@ export function libraryErrorText(t: Strings, error: LibraryState["error"]): stri
     case "not-signed-in": return t.libErrNotSignedIn;
     case "offline": return t.libErrOffline;
     case "server": return t.libErrServer;
+    case "server-empty": return t.libErrServerEmpty;
     case "invalid-url": return t.libErrInvalidUrl;
     case "insecure-url": return t.libErrInsecureUrl;
     case null: return "";
