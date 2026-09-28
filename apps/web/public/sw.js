@@ -4,8 +4,8 @@
 // it should still open from the home screen and say "offline" instead of the
 // browser's error page, then reconnect by itself. State, audio and the API
 // are never cached — a stale channel list on a beltpack is worse than none.
-const SHELL = "intercom-shell-v1";
-const SHELL_FILES = ["/", "/manifest.webmanifest", "/icons/beltpack-192.png", "/icons/beltpack-512.png"];
+const SHELL = "intercom-shell-v2";
+const SHELL_FILES = ["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/favicon.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(SHELL).then((c) => c.addAll(SHELL_FILES)).then(() => self.skipWaiting()));

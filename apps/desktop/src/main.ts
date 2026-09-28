@@ -1,6 +1,6 @@
 // Electron-Main-Prozess der Desktop-Huelle.
 //
-// Broadcast Intercom ist im Kern ein Server (Express + WS), gegen den sich
+// LZ Broadcast Intercom ist im Kern ein Server (Express + WS), gegen den sich
 // Beltpacks und Telefon-Clients im LAN verbinden, plus ein Web-UI, das der
 // Operator bedient. Die Desktop-App aendert daran NICHTS an der Architektur:
 // dieser Main-Prozess startet denselben Kern (gebuendelt als `server.cjs`) als
@@ -12,6 +12,12 @@
 import { app, BrowserWindow, ipcMain, safeStorage, shell, utilityProcess, type UtilityProcess } from "electron";
 import path from "node:path";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+
+// userData leitet Electron aus dem productName ab. Seit der Umbenennung in
+// „LZ Broadcast Intercom" zeigt es sonst auf einen leeren Ordner: Konfigurationen,
+// Modelle und das Bibliotheks-Token blieben im alten zurueck. Muss vor jedem
+// getPath("userData") stehen.
+if (app.isPackaged) app.setPath("userData", path.join(app.getPath("appData"), "Broadcast Intercom"));
 
 const PORT = Number(process.env.PORT || 4001);
 const STARTUP_URL = `http://localhost:${PORT}`;
@@ -125,7 +131,7 @@ function createWindow(): void {
 		minWidth: 960,
 		minHeight: 600,
 		backgroundColor: "#0b0f14",
-		title: "Broadcast Intercom",
+		title: "LZ Broadcast Intercom",
 		autoHideMenuBar: true,
 		webPreferences: {
 			contextIsolation: true,

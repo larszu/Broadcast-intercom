@@ -5,7 +5,7 @@ export type Lang = "en" | "de";
 
 const EN = {
   // ── App sidebar ────────────────────────────────────────
-  appTitle: "Intercom",
+  appTitle: "LZ Broadcast Intercom",
   navMonitor: "Monitor",
   navSetup: "Setup",
   tabDeviceStatus: "Devices",
@@ -151,7 +151,7 @@ const EN = {
   transcriptTitle: "Transcripts",
 
   // ── Start screen ───────────────────────────────────────
-  startTitle: "Broadcast Intercom",
+  startTitle: "LZ Broadcast Intercom",
   startSubtitle: "Browser-based intercom host for wired and web clients",
   startLoad: "Load",
   startNew: "New configuration",
@@ -204,7 +204,7 @@ const EN = {
   liveTalk: "LIVE",
 
   // ── Wizard ─────────────────────────────────────────────
-  wizardTitle: "Welcome to Broadcast Intercom",
+  wizardTitle: "Welcome to LZ Broadcast Intercom",
   wizardStep1Title: "What is this?",
   wizardStep1Body:
     "A browser-based professional intercom system. Use the web client on any phone or tablet to join intercom channels \u2014 no app installation needed.",
@@ -227,6 +227,9 @@ const EN = {
   settingsLanguage: "Interface language",
   settingsLanguageEn: "English",
   settingsLanguageDe: "Deutsch",
+  settingsAbout: "About",
+  aboutVersion: "Version",
+  aboutCompany: "Lars Zumpe Medienproduktion",
   // ── Users, guide, microphone, plugin browser ─────────────────────────────
   umTitle: "Users & Permissions",
   umHint: "Web clients and phones are treated like beltpacks and get their permissions from the assigned user.",
@@ -533,7 +536,7 @@ const EN = {
 };
 
 const DE: typeof EN = {
-  appTitle: "Intercom",
+  appTitle: "LZ Broadcast Intercom",
   navMonitor: "Monitor",
   navSetup: "Setup",
   tabDeviceStatus: "Ger\u00e4te",
@@ -661,7 +664,7 @@ const DE: typeof EN = {
   softReleaseAll: "Alle lösen",
   softNoTranscripts: "Noch keine Transkriptzeilen.",
   transcriptTitle: "Transkripte",
-  startTitle: "Broadcast Intercom",
+  startTitle: "LZ Broadcast Intercom",
   startSubtitle: "Browserbasierter Intercom-Host für kabelgebundene und Web-Clients",
   startLoad: "Laden",
   startNew: "Neue Konfiguration",
@@ -702,7 +705,7 @@ const DE: typeof EN = {
   pttTapToStop: "Tippen zum Stoppen",
   holdToTalk: "Halten zum Sprechen",
   liveTalk: "LIVE",
-  wizardTitle: "Willkommen bei Broadcast Intercom",
+  wizardTitle: "Willkommen bei LZ Broadcast Intercom",
   wizardStep1Title: "Was ist das?",
   wizardStep1Body: "Ein browserbasiertes professionelles Intercom-System. Nutze den Webclient auf jedem Handy oder Tablet \u2013 keine App-Installation erforderlich.",
   wizardStep2Title: "So funktioniert es",
@@ -718,6 +721,9 @@ const DE: typeof EN = {
   settingsLanguage: "Sprache",
   settingsLanguageEn: "English",
   settingsLanguageDe: "Deutsch",
+  settingsAbout: "Über",
+  aboutVersion: "Version",
+  aboutCompany: "Lars Zumpe Medienproduktion",
   // ── Benutzer, Führung, Mikrofon, Plugin-Browser ─────────────────────────────
   umTitle: "Benutzer & Rechte",
   umHint: "Web-Clients und Handys werden wie Beltpacks behandelt und bekommen ihre Rechte über den zugewiesenen Benutzer.",

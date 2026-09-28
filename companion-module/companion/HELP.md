@@ -1,6 +1,6 @@
-# Broadcast Intercom
+# LZ Broadcast Intercom
 
-Control a [Broadcast Intercom](https://github.com/larszu/Broadcast-intercom) core
+Control an [LZ Broadcast Intercom](https://github.com/larszu/Broadcast-intercom) core
 server from a Stream Deck (or any Companion surface): push-to-talk, mute, volume,
 direct calls and emergency — with live talk / battery / emergency feedback.
 

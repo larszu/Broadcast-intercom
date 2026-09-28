@@ -9,6 +9,7 @@ import { FirstStartWizard } from "./views/FirstStartWizard";
 import { FuehrungsHost } from "./views/FuehrungsHost";
 import { useFuehrung, fuehrungStarten, fuehrungErledigt } from "./lib/fuehrung";
 import { useLang } from "./i18n";
+import signet from "./assets/brand/lzm_signet_offwhite_tally.svg";
 
 type Page = "monitor" | "setup";
 
@@ -89,7 +90,7 @@ export default function App() {
     <div className="appLayout">
       <header className="appTopBar">
         <div className="topBarBrand">
-          <span className="brandIcon">🎤</span>
+          <img className="brandSignet" src={signet} alt="" aria-hidden="true" />
           <span className="brandName">{t.appTitle}</span>
           <span className={`connPill ${connected ? "on" : "off"}`}>
             {connected ? t.dashOnline : t.dashOffline}

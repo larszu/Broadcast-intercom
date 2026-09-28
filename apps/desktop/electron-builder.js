@@ -10,7 +10,7 @@ const year = new Date().getFullYear();
 
 module.exports = {
 	appId: "net.broadcastintercom.app",
-	productName: "Broadcast Intercom",
+	productName: "LZ Broadcast Intercom",
 	copyright: `Copyright © ${year} Lars Zumpe`,
 	// Auto-Update-Quelle. electron-builder bettet daraus die app-update.yml ins
 	// Paket ein; die release.yml haengt latest*.yml + Blockmaps ans Release, der
@@ -66,7 +66,7 @@ module.exports = {
 		oneClick: false,
 		allowToChangeInstallationDirectory: true,
 		perMachine: false,
-		shortcutName: "Broadcast Intercom",
+		shortcutName: "LZ Broadcast Intercom",
 		createDesktopShortcut: true,
 		createStartMenuShortcut: true,
 	},

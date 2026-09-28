@@ -168,7 +168,7 @@ input:focus, select:focus, textarea:focus {
   flex-shrink: 0; z-index: 10;
 }
 .topBarBrand { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-.brandIcon { font-size: 18px; }
+.brandSignet { display: block; height: 32px; width: auto; }
 .brandName { font-weight: 700; font-size: 15px; color: var(--text); }
 .connPill { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 0; border: 1px solid; }
 .connPill.on  { color: var(--success); border-color: rgba(46,196,160,0.4); }
@@ -382,6 +382,9 @@ input[type="range"]:disabled {
 .softclientHeader h2 { margin-bottom: 0; }
 .clientIdBadge { font-size: 11px; color: var(--text2); background: var(--bg3); padding: 2px 8px; border-radius: 0; }
 .softSection { margin-bottom: 16px; padding: 16px; background: var(--bg2); border-radius: 0; border: 1px solid var(--border); }
+.aboutLogo { display: block; width: 160px; height: auto; margin-bottom: 24px; }
+.aboutLine { margin: 0 0 4px; color: var(--text); }
+.aboutLine.muted { color: var(--text2); }
 .softSection h3 { margin: 0 0 12px; font-size: 0.75rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; }
 .softAudioRow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .micMeter { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 160px; }
@@ -564,6 +567,9 @@ input[type="range"]:disabled {
   .softclientPanel { padding: 0 10px 10px; }
   .saveAsBar { flex-wrap: wrap; }
   .saveAsBar input { min-width: 0; flex: 1; }
+}
+@media (max-width: 639px) {
+  .brandSignet { display: none; }
 }
 @media (max-width: 480px) {
   .topBarActions { display: none; }

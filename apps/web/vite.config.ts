@@ -20,8 +20,12 @@ const httpsConfig = hasCerts
     }
   : undefined;
 
+// Die Wurzel traegt die Version: release.yml setzt sie dort aus dem Tag.
+const rootPkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../../package.json"), "utf8"));
+
 export default defineConfig({
   plugins: [react()],
+  define: { __APP_VERSION__: JSON.stringify(rootPkg.version) },
   server: {
     host: true,
     https: httpsConfig,

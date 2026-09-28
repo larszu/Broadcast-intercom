@@ -5,7 +5,7 @@
 # native, ein nachgelagerter Job sammelt die Artefakte ein und erstellt das
 # Release.
 #
-# Broadcast Intercom ist im Kern ein Node-Server (Express + WS) plus Web-UI, kein
+# LZ Broadcast Intercom ist im Kern ein Node-Server (Express + WS) plus Web-UI, kein
 # klassisches Electron-Projekt. Die Desktop-Huelle (`apps/desktop`) buendelt den
 # Kern als `server.cjs`, startet ihn aus dem Electron-Main-Prozess und zeigt die
 # vom Kern ausgelieferte UI im Fenster. electron-builder verpackt das zu .exe
@@ -57,7 +57,7 @@ jobs:
       - name: Sync package.json version to tag
         # Tag und package.json.version driften sonst auseinander. electron-builder
         # liest apps/desktop/package.json.version -> Dateiname
-        # "Broadcast Intercom-X.Y.Z-arch.ext" MUSS dem Tag entsprechen. Sowohl
+        # "LZ Broadcast Intercom-X.Y.Z-arch.ext" MUSS dem Tag entsprechen. Sowohl
         # die Wurzel als auch das Desktop-Paket werden gesetzt (nur im Runner,
         # ohne Commit/Tag). workflow_dispatch ohne Tag wird uebersprungen.
         if: startsWith(github.ref, 'refs/tags/v')

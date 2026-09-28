@@ -3,7 +3,7 @@
 	"id": "broadcast-intercom",
 	"name": "broadcast-intercom",
 	"shortname": "Intercom",
-	"description": "Control the Broadcast Intercom core: push-to-talk, mute, volume, direct calls and emergency, with live talk/battery/emergency feedback.",
+	"description": "Control the LZ Broadcast Intercom core: push-to-talk, mute, volume, direct calls and emergency, with live talk/battery/emergency feedback.",
 	"version": "1.0.0",
 	"license": "UNLICENSED",
 	"repository": "git+https://github.com/larszu/Broadcast-intercom.git",
@@ -21,9 +21,9 @@
 		"apiVersion": "1.0.0",
 		"entrypoint": "../src/index.js"
 	},
-	"manufacturer": "Broadcast Intercom",
+	"manufacturer": "LZ Broadcast Intercom",
 	"products": [
-		"Broadcast Intercom Core"
+		"LZ Broadcast Intercom Core"
 	],
 	"keywords": [
 		"intercom",
