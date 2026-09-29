@@ -3,6 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "description": "Prototype for mixed DECT and PoE beltpack intercom system",
+  "keywords": [
+    "intercom",
+    "broadcast",
+    "live-production",
+    "talkback",
+    "partyline",
+    "beltpack",
+    "dect",
+    "voip",
+    "event-technology",
+    "self-hosted",
+    "browser-based",
+    "audio",
+    "realtime",
+    "typescript"
+  ],
   "workspaces": [
     "apps/*",
     "packages/*"
