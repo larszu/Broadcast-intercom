@@ -11,7 +11,7 @@ LZ Broadcast Intercom is a self-hosted, browser-based production intercom system
 Every push to the default branch builds this repo's page from
 `.github/workflows/pages.yml` and publishes it:
 
-**https://larszu.github.io/Broadcast-intercom/**
+**https://larszu.github.io/lz-Broadcast-intercom/**
 
 The workflow **asks the Pages API before it configures anything.** With no
 Pages site it still builds — that is a real check — and skips only the
@@ -144,8 +144,8 @@ mkcert -install
 ### Installation
 
 ```bash
-git clone https://github.com/larszu/Broadcast-intercom.git
-cd Broadcast-intercom
+git clone https://github.com/larszu/lz-Broadcast-intercom.git
+cd lz-Broadcast-intercom
 npm install
 ```
 
